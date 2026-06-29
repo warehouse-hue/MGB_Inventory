@@ -8,7 +8,6 @@ type Props = {
 };
 
 export default function AppBootstrap({ children }: Props) {
-  const [ready, setReady] = useState(false);
   const [syncTick, setSyncTick] = useState(0);
 
   useEffect(() => {
@@ -27,12 +26,10 @@ export default function AppBootstrap({ children }: Props) {
     };
 
     void bootstrapCloudSync().finally(() => {
-      if (mounted) {
-        setReady(true);
-        timer = setInterval(() => {
-          void pullLatest();
-        }, 5000);
-      }
+      if (!mounted) return;
+      timer = setInterval(() => {
+        void pullLatest();
+      }, 5000);
     });
 
     const onFocus = () => {
@@ -49,14 +46,6 @@ export default function AppBootstrap({ children }: Props) {
       window.removeEventListener("focus", onFocus);
     };
   }, []);
-
-  if (!ready) {
-    return (
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-        Syncing cloud data...
-      </div>
-    );
-  }
 
   return <div data-sync-tick={syncTick}>{children}</div>;
 }

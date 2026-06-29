@@ -20,6 +20,24 @@ type RemoteRow = {
 let bootstrapPromise: Promise<void> | null = null;
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = 8000
+) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function hasConfig() {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -76,7 +94,7 @@ async function getRemoteRow(): Promise<RemoteRow | null> {
   const namespace = encodeURIComponent(getNamespace());
   const url = `${baseUrl}/rest/v1/app_state?id=eq.${namespace}&select=id,payload,updated_at&limit=1`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: "GET",
     headers: getHeaders(),
   });
@@ -100,7 +118,7 @@ async function upsertRemoteSnapshot(snapshot: Snapshot) {
     updated_at: new Date().toISOString(),
   };
 
-  const response = await fetch(`${baseUrl}/rest/v1/app_state`, {
+  const response = await fetchWithTimeout(`${baseUrl}/rest/v1/app_state`, {
     method: "POST",
     headers: {
       ...getHeaders(),
