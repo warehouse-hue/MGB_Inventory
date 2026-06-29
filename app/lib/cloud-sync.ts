@@ -1,0 +1,155 @@
+const CLOUD_UPDATED_AT_KEY = "mgb-cloud-updated-at";
+
+const STORAGE_KEYS = [
+  "mgb-products",
+  "mgb-inventory",
+  "mgb-orders",
+  "mgb-suppliers",
+  "mgb-transactions",
+  "mgb-activity-log",
+] as const;
+
+type Snapshot = Record<(typeof STORAGE_KEYS)[number], unknown[]>;
+
+type RemoteRow = {
+  id: string;
+  payload: Snapshot;
+  updated_at: string;
+};
+
+let bootstrapPromise: Promise<void> | null = null;
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+
+function hasConfig() {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
+
+function getNamespace() {
+  return process.env.NEXT_PUBLIC_SYNC_NAMESPACE || "default";
+}
+
+function getHeaders() {
+  const apiKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+  return {
+    apikey: apiKey,
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
+}
+
+function readArray(key: (typeof STORAGE_KEYS)[number]): unknown[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function readLocalSnapshot(): Snapshot {
+  return STORAGE_KEYS.reduce((acc, key) => {
+    acc[key] = readArray(key);
+    return acc;
+  }, {} as Snapshot);
+}
+
+function writeLocalSnapshot(snapshot: Snapshot) {
+  for (const key of STORAGE_KEYS) {
+    localStorage.setItem(key, JSON.stringify(snapshot[key] || []));
+  }
+}
+
+function hasData(snapshot: Snapshot) {
+  return STORAGE_KEYS.some((key) => (snapshot[key] || []).length > 0);
+}
+
+async function getRemoteRow(): Promise<RemoteRow | null> {
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!baseUrl) return null;
+
+  const namespace = encodeURIComponent(getNamespace());
+  const url = `${baseUrl}/rest/v1/app_state?id=eq.${namespace}&select=id,payload,updated_at&limit=1`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: getHeaders(),
+  });
+
+  if (!response.ok) return null;
+
+  const rows = (await response.json()) as RemoteRow[];
+  return rows[0] || null;
+}
+
+async function upsertRemoteSnapshot(snapshot: Snapshot) {
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!baseUrl) return;
+
+  const body = {
+    id: getNamespace(),
+    payload: snapshot,
+    updated_at: new Date().toISOString(),
+  };
+
+  await fetch(`${baseUrl}/rest/v1/app_state`, {
+    method: "POST",
+    headers: {
+      ...getHeaders(),
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(body),
+  });
+
+  localStorage.setItem(CLOUD_UPDATED_AT_KEY, String(Date.now()));
+}
+
+export async function bootstrapCloudSync() {
+  if (typeof window === "undefined" || !hasConfig()) return;
+
+  if (!bootstrapPromise) {
+    bootstrapPromise = (async () => {
+      try {
+        const remote = await getRemoteRow();
+        const localSnapshot = readLocalSnapshot();
+
+        if (remote?.payload && hasData(remote.payload)) {
+          const remoteTs = Date.parse(remote.updated_at || "");
+          const localTs = Number(localStorage.getItem(CLOUD_UPDATED_AT_KEY) || "0");
+
+          if (!localTs || remoteTs >= localTs) {
+            writeLocalSnapshot(remote.payload);
+            localStorage.setItem(CLOUD_UPDATED_AT_KEY, String(remoteTs || Date.now()));
+            return;
+          }
+        }
+
+        if (hasData(localSnapshot)) {
+          await upsertRemoteSnapshot(localSnapshot);
+        }
+      } catch {
+        // Keep the app usable offline/local-only when cloud sync is unavailable.
+      }
+    })();
+  }
+
+  return bootstrapPromise;
+}
+
+export function queueCloudSync() {
+  if (typeof window === "undefined" || !hasConfig()) return;
+
+  if (syncTimer) {
+    clearTimeout(syncTimer);
+  }
+
+  syncTimer = setTimeout(() => {
+    const snapshot = readLocalSnapshot();
+    void upsertRemoteSnapshot(snapshot);
+  }, 600);
+}

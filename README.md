@@ -20,6 +20,54 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Cross-Device Data Sync (Supabase)
+
+By default, data is stored in browser localStorage. To share the same data between different computers, configure Supabase sync:
+
+1. Create a Supabase project.
+2. Run this SQL in Supabase SQL Editor:
+
+```sql
+create table if not exists public.app_state (
+	id text primary key,
+	payload jsonb not null default '{}'::jsonb,
+	updated_at timestamptz not null default now()
+);
+
+alter table public.app_state enable row level security;
+
+create policy "allow_public_read"
+on public.app_state
+for select
+to anon
+using (true);
+
+create policy "allow_public_write"
+on public.app_state
+for insert
+to anon
+with check (true);
+
+create policy "allow_public_update"
+on public.app_state
+for update
+to anon
+using (true)
+with check (true);
+```
+
+3. Add these environment variables in deployment and local `.env.local`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SYNC_NAMESPACE=main
+```
+
+Notes:
+- `NEXT_PUBLIC_SYNC_NAMESPACE` lets you separate environments (for example: `dev`, `staging`, `prod`).
+- If these env vars are missing, the app falls back to local-only storage.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
