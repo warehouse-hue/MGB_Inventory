@@ -9,6 +9,10 @@ type Props = {
 
 export default function AppBootstrap({ children }: Props) {
   const [syncTick, setSyncTick] = useState(0);
+  const hasCloudConfig = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -47,5 +51,14 @@ export default function AppBootstrap({ children }: Props) {
     };
   }, []);
 
-  return <div data-sync-tick={syncTick}>{children}</div>;
+  return (
+    <div data-sync-tick={syncTick}>
+      {!hasCloudConfig ? (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Cloud sync is not configured in this deployment. Data is currently local to this browser.
+        </div>
+      ) : null}
+      {children}
+    </div>
+  );
 }
