@@ -34,6 +34,9 @@ create table if not exists public.app_state (
 	updated_at timestamptz not null default now()
 );
 
+grant usage on schema public to anon, authenticated;
+grant select, insert, update on public.app_state to anon, authenticated;
+
 alter table public.app_state enable row level security;
 
 create policy "allow_public_read"

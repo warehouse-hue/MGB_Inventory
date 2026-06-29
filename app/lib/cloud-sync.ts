@@ -81,7 +81,10 @@ async function getRemoteRow(): Promise<RemoteRow | null> {
     headers: getHeaders(),
   });
 
-  if (!response.ok) return null;
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Cloud read failed (${response.status}): ${text}`);
+  }
 
   const rows = (await response.json()) as RemoteRow[];
   return rows[0] || null;
@@ -97,7 +100,7 @@ async function upsertRemoteSnapshot(snapshot: Snapshot) {
     updated_at: new Date().toISOString(),
   };
 
-  await fetch(`${baseUrl}/rest/v1/app_state`, {
+  const response = await fetch(`${baseUrl}/rest/v1/app_state`, {
     method: "POST",
     headers: {
       ...getHeaders(),
@@ -106,7 +109,27 @@ async function upsertRemoteSnapshot(snapshot: Snapshot) {
     body: JSON.stringify(body),
   });
 
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Cloud write failed (${response.status}): ${text}`);
+  }
+
   localStorage.setItem(CLOUD_UPDATED_AT_KEY, String(Date.now()));
+}
+
+export async function pullCloudSnapshot() {
+  if (typeof window === "undefined" || !hasConfig()) return;
+
+  const remote = await getRemoteRow();
+  if (!remote?.payload || !hasData(remote.payload)) return;
+
+  const remoteTs = Date.parse(remote.updated_at || "");
+  const localTs = Number(localStorage.getItem(CLOUD_UPDATED_AT_KEY) || "0");
+
+  if (!localTs || remoteTs >= localTs) {
+    writeLocalSnapshot(remote.payload);
+    localStorage.setItem(CLOUD_UPDATED_AT_KEY, String(remoteTs || Date.now()));
+  }
 }
 
 export async function bootstrapCloudSync() {
@@ -132,7 +155,8 @@ export async function bootstrapCloudSync() {
         if (hasData(localSnapshot)) {
           await upsertRemoteSnapshot(localSnapshot);
         }
-      } catch {
+      } catch (error) {
+        console.error(error);
         // Keep the app usable offline/local-only when cloud sync is unavailable.
       }
     })();
@@ -150,6 +174,8 @@ export function queueCloudSync() {
 
   syncTimer = setTimeout(() => {
     const snapshot = readLocalSnapshot();
-    void upsertRemoteSnapshot(snapshot);
+    void upsertRemoteSnapshot(snapshot).catch((error) => {
+      console.error(error);
+    });
   }, 600);
 }
