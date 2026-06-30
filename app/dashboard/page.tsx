@@ -82,12 +82,12 @@ export default function DashboardPage() {
       {/* HEADER */}
       <div>
         <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-white/60">Warehouse snapshot</p>
+        <p className="text-slate-600">Warehouse snapshot</p>
       </div>
 
       {/* LOADING STATE (NO EARLY HOOK EXIT) */}
       {!mounted ? (
-        <div className="text-white/40">Loading dashboard...</div>
+        <div className="text-slate-500">Loading dashboard...</div>
       ) : (
         <>
           {/* KPI CARDS */}
@@ -108,11 +108,13 @@ export default function DashboardPage() {
                 label="Products"
                 value={stock.totalProducts}
                 description="Tracked product records."
+                accentClassName="bg-cyan-50/70 border-cyan-200"
               />
               <Card
                 label="Total Units"
                 value={stock.totalUnits}
                 description="Current stock quantity."
+                accentClassName="bg-white border-slate-200/80"
               />
               <Card
                 label="Available"
@@ -152,17 +154,17 @@ export default function DashboardPage() {
           <div className="grid gap-4 xl:grid-cols-2">
             {/* LOW STOCK */}
             <div className="glass-card p-6">
-              <h2 className="text-lg font-semibold underline decoration-amber-300 underline-offset-2 mb-4">
+              <h2 className="text-lg font-semibold underline decoration-cyan-300 underline-offset-2 mb-4">
               Low Stock Alerts
             </h2>
 
               {stock.lowStockItems.length === 0 ? (
-                <p className="text-white/40">All stock levels healthy</p>
+                <p className="text-slate-500">All stock levels healthy</p>
               ) : (
                 stock.lowStockItems.map((item: any) => (
-                  <div key={item.id} className="flex justify-between text-sm py-3 border-b border-white/10 last:border-b-0">
+                  <div key={item.id} className="flex justify-between text-sm py-3 border-b border-slate-200/70 last:border-b-0">
                     <span>Product #{item.productId}</span>
-                    <span className="font-semibold text-amber-300">{item.stock}</span>
+                    <span className="font-semibold text-cyan-700">{item.stock}</span>
                   </div>
                 ))
               )}
@@ -170,17 +172,17 @@ export default function DashboardPage() {
 
             {/* TOP PRODUCTS */}
             <div className="glass-card p-6">
-              <h2 className="text-lg font-semibold underline decoration-sky-300 underline-offset-2 mb-4">
+              <h2 className="text-lg font-semibold underline decoration-cyan-300 underline-offset-2 mb-4">
               Most Active Products
             </h2>
 
               {topProducts.length === 0 ? (
-                <p className="text-white/40">No activity yet</p>
+                <p className="text-slate-500">No activity yet</p>
               ) : (
                 topProducts.map((p: any) => (
-                  <div key={p.productId} className="flex justify-between text-sm py-3 border-b border-white/10 last:border-b-0">
+                  <div key={p.productId} className="flex justify-between text-sm py-3 border-b border-slate-200/70 last:border-b-0">
                     <span>Product #{p.productId}</span>
-                    <span className="font-semibold text-sky-300">{p.activity}</span>
+                    <span className="font-semibold text-cyan-700">{p.activity}</span>
                   </div>
                 ))
               )}

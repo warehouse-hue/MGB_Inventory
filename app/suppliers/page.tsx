@@ -5,22 +5,7 @@ import { getSuppliers, saveSuppliers, addSupplier, addActivity, Supplier } from 
 
 type LocalSupplier = Supplier;
 
-const initialSuppliers: LocalSupplier[] = [
-  {
-    id: 1,
-    name: "Drum Supply Co",
-    email: "contact@drumsupply.com",
-    phone: "123-456-789",
-    category: "Drum Heads",
-  },
-  {
-    id: 2,
-    name: "Pro Consumables Ltd",
-    email: "sales@proconsumables.com",
-    phone: "987-654-321",
-    category: "Hardware",
-  },
-];
+const initialSuppliers: LocalSupplier[] = [];
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<LocalSupplier[]>(initialSuppliers);
