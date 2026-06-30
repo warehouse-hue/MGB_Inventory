@@ -103,10 +103,17 @@ export default function DashboardPage() {
                 href="/inventory"
               />
               <Card
-                label="Current Orders"
+                label="Out of Stock"
+                value={stock.outOfStockCount}
+                description="Inventory entries currently at zero stock."
+                accentClassName="bg-rose-50 border-rose-200"
+                href="/inventory"
+              />
+              <Card
+                label="On Board for Delivery"
                 value={openOrderSummary.count}
                 description="Purchase orders still awaiting completion."
-                accentClassName="bg-emerald-50 border-emerald-200"
+                accentClassName="bg-sky-50 border-sky-200"
                 href="/purchase-orders"
               />
               <Card
