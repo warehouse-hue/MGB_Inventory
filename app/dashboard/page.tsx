@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getTransactions } from "../lib/transactions";
+import { getOrders } from "../lib/storage";
 import {
   getStockSummary,
   getMovementSummary,
@@ -77,6 +78,22 @@ export default function DashboardPage() {
     return safeArray(getTopActiveProducts(transactions));
   }, [mounted, transactions]);
 
+  const openOrderSummary = useMemo(() => {
+    if (!mounted) {
+      return {
+        count: 0,
+        units: 0,
+      };
+    }
+
+    const openOrders = getOrders().filter((order) => order.status === "OPEN");
+
+    return {
+      count: openOrders.length,
+      units: openOrders.reduce((sum, order) => sum + safeNumber(order.quantity), 0),
+    };
+  }, [mounted, transactions]);
+
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
 
@@ -113,23 +130,23 @@ export default function DashboardPage() {
                 href="/products"
               />
               <Card
-                label="Total Units"
-                value={stock.totalUnits}
-                description="Current stock quantity."
-                accentClassName="bg-white border-slate-200/80"
+                label="Low Stock"
+                value={stock.lowStockCount}
+                description="Items needing attention soon."
+                accentClassName="bg-amber-50 border-amber-200"
                 href="/inventory"
               />
               <Card
-                label="Available"
-                value={stock.totalProducts - stock.outOfStockCount}
-                description="Products currently available."
+                label="Open Orders"
+                value={openOrderSummary.count}
+                description="Purchase orders still awaiting completion."
                 accentClassName="bg-emerald-50 border-emerald-200"
-                href="/inventory"
+                href="/purchase-orders"
               />
               <Card
-                label="Unavailable"
+                label="Out of Stock"
                 value={stock.outOfStockCount}
-                description="Products not available."
+                description="Inventory entries currently at zero stock."
                 accentClassName="bg-rose-50 border-rose-200"
                 href="/inventory"
               />
@@ -146,10 +163,10 @@ export default function DashboardPage() {
                 href="/reports"
               />
               <Card
-                label="Net Movement"
-                value={movement.netMovement}
-                description="Net stock change."
-                href="/reports"
+                label="Units on Order"
+                value={openOrderSummary.units}
+                description="Total quantity currently on open purchase orders."
+                href="/purchase-orders"
               />
               <Card
                 label="Transactions"
