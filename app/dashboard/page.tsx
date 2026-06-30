@@ -6,8 +6,6 @@ import { getTransactions } from "../lib/transactions";
 import { getOrders } from "../lib/storage";
 import {
   getStockSummary,
-  getMovementSummary,
-  getTopActiveProducts,
 } from "../lib/reports";
 import type { Transaction } from "../lib/transactions";
 
@@ -22,12 +20,10 @@ function safeNumber(value: any): number {
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   /* ALWAYS RUN HOOKS IN SAME ORDER */
   useEffect(() => {
     setMounted(true);
-    setTransactions(getTransactions());
   }, []);
 
   /* ALWAYS DECLARE HOOKS (NO CONDITIONAL EXIT BEFORE THIS) */
@@ -53,30 +49,7 @@ export default function DashboardPage() {
       lowStockItems: safeArray(s?.lowStockItems),
       outOfStockItems: safeArray(s?.outOfStockItems),
     };
-  }, [mounted, transactions]);
-
-  const movement = useMemo(() => {
-    if (!mounted) {
-      return {
-        totalIn: 0,
-        totalOut: 0,
-        netMovement: 0,
-      };
-    }
-
-    const m = getMovementSummary(transactions);
-
-    return {
-      totalIn: safeNumber(m?.totalIn),
-      totalOut: safeNumber(m?.totalOut),
-      netMovement: safeNumber(m?.netMovement),
-    };
-  }, [mounted, transactions]);
-
-  const topProducts = useMemo(() => {
-    if (!mounted) return [];
-    return safeArray(getTopActiveProducts(transactions));
-  }, [mounted, transactions]);
+  }, [mounted]);
 
   const openOrderSummary = useMemo(() => {
     if (!mounted) {
@@ -92,7 +65,7 @@ export default function DashboardPage() {
       count: openOrders.length,
       units: openOrders.reduce((sum, order) => sum + safeNumber(order.quantity), 0),
     };
-  }, [mounted, transactions]);
+  }, [mounted]);
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
@@ -123,13 +96,6 @@ export default function DashboardPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <Card
-                label="Products"
-                value={stock.totalProducts}
-                description="Tracked product records."
-                accentClassName="bg-cyan-50/70 border-cyan-200"
-                href="/products"
-              />
-              <Card
                 label="Low Stock"
                 value={stock.lowStockCount}
                 description="Items needing attention soon."
@@ -137,30 +103,11 @@ export default function DashboardPage() {
                 href="/inventory"
               />
               <Card
-                label="Open Orders"
+                label="Current Orders"
                 value={openOrderSummary.count}
                 description="Purchase orders still awaiting completion."
                 accentClassName="bg-emerald-50 border-emerald-200"
                 href="/purchase-orders"
-              />
-              <Card
-                label="Out of Stock"
-                value={stock.outOfStockCount}
-                description="Inventory entries currently at zero stock."
-                accentClassName="bg-rose-50 border-rose-200"
-                href="/inventory"
-              />
-              <Card
-                label="Stock In"
-                value={movement.totalIn}
-                description="Restocked quantity."
-                href="/reports"
-              />
-              <Card
-                label="Stock Out"
-                value={movement.totalOut}
-                description="Shipped or removed quantity."
-                href="/reports"
               />
               <Card
                 label="Units on Order"
@@ -168,56 +115,46 @@ export default function DashboardPage() {
                 description="Total quantity currently on open purchase orders."
                 href="/purchase-orders"
               />
-              <Card
-                label="Transactions"
-                value={transactions.length}
-                description="Activity entries."
-                href="/reports"
-              />
             </div>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            {/* LOW STOCK */}
-            <div className="glass-card p-6">
-              <h2 className="text-lg font-semibold underline decoration-cyan-300 underline-offset-2 mb-4">
-              Low Stock Alerts
-            </h2>
-
-              {stock.lowStockItems.length === 0 ? (
-                <p className="text-slate-500">All stock levels healthy</p>
-              ) : (
-                stock.lowStockItems.map((item: any) => (
-                  <div key={item.id} className="flex justify-between text-sm py-3 border-b border-slate-200/70 last:border-b-0">
-                    <span>Product #{item.productId}</span>
-                    <span className="font-semibold text-cyan-700">{item.stock}</span>
-                  </div>
-                ))
-              )}
+          <div className="glass-card p-6">
+            <div className="mb-4">
+              <p className="text-sm uppercase tracking-[0.24em] text-slate-500">
+                Quick access
+              </p>
+              <h2 className="text-2xl font-semibold text-slate-950">
+                Quick Redirects
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Jump straight to the areas you use most.
+              </p>
             </div>
 
-            {/* TOP PRODUCTS */}
-            <div className="glass-card p-6">
-              <h2 className="text-lg font-semibold underline decoration-cyan-300 underline-offset-2 mb-4">
-              Most Active Products
-            </h2>
-
-              {topProducts.length === 0 ? (
-                <p className="text-slate-500">No activity yet</p>
-              ) : (
-                topProducts.map((p: any) => (
-                  <div key={p.productId} className="flex justify-between text-sm py-3 border-b border-slate-200/70 last:border-b-0">
-                    <span>Product #{p.productId}</span>
-                    <span className="font-semibold text-cyan-700">{p.activity}</span>
-                  </div>
-                ))
-              )}
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <QuickLink href="/inventory" label="Inventory" />
+              <QuickLink href="/products" label="Products" />
+              <QuickLink href="/purchase-orders" label="Orders" />
+              <QuickLink href="/suppliers" label="Suppliers" />
+              <QuickLink href="/reports" label="Reports" />
+              <QuickLink href="/settings" label="Settings" />
             </div>
           </div>
         </>
       )}
 
     </div>
+  );
+}
+
+function QuickLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-2xl border border-cyan-200 bg-white px-4 py-4 text-center text-sm font-semibold text-slate-800 transition duration-200 hover:-translate-y-0.5 hover:border-cyan-400 hover:bg-cyan-50"
+    >
+      {label}
+    </Link>
   );
 }
 
