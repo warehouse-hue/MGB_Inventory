@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getTransactions } from "../lib/transactions";
 import {
@@ -109,44 +110,52 @@ export default function DashboardPage() {
                 value={stock.totalProducts}
                 description="Tracked product records."
                 accentClassName="bg-cyan-50/70 border-cyan-200"
+                href="/products"
               />
               <Card
                 label="Total Units"
                 value={stock.totalUnits}
                 description="Current stock quantity."
                 accentClassName="bg-white border-slate-200/80"
+                href="/inventory"
               />
               <Card
                 label="Available"
                 value={stock.totalProducts - stock.outOfStockCount}
                 description="Products currently available."
                 accentClassName="bg-emerald-50 border-emerald-200"
+                href="/inventory"
               />
               <Card
                 label="Unavailable"
                 value={stock.outOfStockCount}
                 description="Products not available."
                 accentClassName="bg-rose-50 border-rose-200"
+                href="/inventory"
               />
               <Card
                 label="Stock In"
                 value={movement.totalIn}
                 description="Restocked quantity."
+                href="/reports"
               />
               <Card
                 label="Stock Out"
                 value={movement.totalOut}
                 description="Shipped or removed quantity."
+                href="/reports"
               />
               <Card
                 label="Net Movement"
                 value={movement.netMovement}
                 description="Net stock change."
+                href="/reports"
               />
               <Card
                 label="Transactions"
                 value={transactions.length}
                 description="Activity entries."
+                href="/reports"
               />
             </div>
           </div>
@@ -201,14 +210,18 @@ function Card({
   value,
   description,
   accentClassName = "bg-white border-slate-200/80",
+  href,
 }: {
   label: string;
   value: number;
   description?: string;
   accentClassName?: string;
+  href?: string;
 }) {
-  return (
-    <div className={`rounded-3xl p-5 shadow-sm border transition duration-200 hover:-translate-y-1 hover:shadow-md ${accentClassName}`}>
+  const className = `rounded-3xl p-5 shadow-sm border transition duration-200 hover:-translate-y-1 hover:shadow-md ${accentClassName}`;
+
+  const content = (
+    <>
       <div>
         <p className="text-slate-700 text-[0.75rem] uppercase tracking-[0.28em] font-semibold underline decoration-slate-300 underline-offset-2">
           {label}
@@ -218,6 +231,16 @@ function Card({
       {description ? (
         <p className="mt-4 text-sm leading-6 text-slate-600">{description}</p>
       ) : null}
-    </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {content}
+      </Link>
+    );
+  }
+
+  return <div className={className}>{content}</div>;
 }
