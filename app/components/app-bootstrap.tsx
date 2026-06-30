@@ -48,7 +48,19 @@ export default function AppBootstrap({ children }: Props) {
       void pullLatest();
     };
 
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void pullLatest();
+      }
+    };
+
+    const onOnline = () => {
+      void pullLatest();
+    };
+
     window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       mounted = false;
@@ -56,6 +68,8 @@ export default function AppBootstrap({ children }: Props) {
         clearInterval(timer);
       }
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 

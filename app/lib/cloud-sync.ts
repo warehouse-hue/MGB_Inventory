@@ -47,7 +47,11 @@ function hasConfig() {
 }
 
 function getNamespace() {
-  return process.env.NEXT_PUBLIC_SYNC_NAMESPACE || "default";
+  return (
+    process.env.NEXT_PUBLIC_SYNC_NAMESPACE ||
+    process.env.NEXT_PUBLIC_SNAPSHOT_NAMESPACE ||
+    "default"
+  );
 }
 
 function getHeaders() {
