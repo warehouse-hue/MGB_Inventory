@@ -8,7 +8,6 @@ const STORAGE_KEYS = [
   "mgb-suppliers",
   "mgb-transactions",
   "mgb-activity-log",
-  "mgb-evidence-log",
 ] as const;
 
 type Snapshot = Record<(typeof STORAGE_KEYS)[number], unknown[]>;

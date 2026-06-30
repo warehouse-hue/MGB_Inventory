@@ -54,19 +54,6 @@ export type Supplier = {
   category: string;
 };
 
-export type EvidenceType = "RECEIVED" | "USED";
-
-export type EvidenceRecord = {
-  id: number;
-  type: EvidenceType;
-  itemName: string;
-  referenceName: string;
-  date: string;
-  notes?: string;
-  imageDataUrl: string;
-  createdAt: number;
-};
-
 /* ---------------- SAFE STORAGE ---------------- */
 function safeNumber(value: any): number {
   const n = Number(value);
@@ -202,33 +189,6 @@ export function saveSuppliers(suppliers: Supplier[]) {
 export function addSupplier(supplier: Supplier) {
   const updated = [supplier, ...getSuppliers()];
   saveSuppliers(updated);
-  return updated;
-}
-
-/* ---------------- EVIDENCE LOG ---------------- */
-
-export function getEvidenceLog(): EvidenceRecord[] {
-  return safeGet<EvidenceRecord[]>("mgb-evidence-log", []);
-}
-
-export function saveEvidenceLog(records: EvidenceRecord[]) {
-  safeSet("mgb-evidence-log", records);
-}
-
-export function addEvidenceRecord(record: Omit<EvidenceRecord, "id" | "createdAt">) {
-  const next: EvidenceRecord = {
-    ...record,
-    id: Date.now(),
-    createdAt: Date.now(),
-  };
-  const updated = [next, ...getEvidenceLog()];
-  saveEvidenceLog(updated);
-  return updated;
-}
-
-export function removeEvidenceRecord(id: number) {
-  const updated = getEvidenceLog().filter((record) => record.id !== id);
-  saveEvidenceLog(updated);
   return updated;
 }
 

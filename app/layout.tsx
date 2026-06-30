@@ -109,15 +109,6 @@ export default function RootLayout({
                   Import CSV
                 </span>
               </Link>
-              <Link className="block rounded-2xl px-4 py-3 transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-cyan-300/15" href="/evidence">
-                <span className="inline-flex items-center gap-3">
-                  <svg viewBox="0 0 24 24" className="h-5 w-5 text-cyan-200" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 7h4l2-2h4l2 2h4v12H4z" />
-                    <circle cx="12" cy="13" r="3" />
-                  </svg>
-                  Evidence
-                </span>
-              </Link>
               <Link className="block rounded-2xl px-4 py-3 transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-cyan-300/15" href="/reports">
                 <span className="inline-flex items-center gap-3">
                   <svg viewBox="0 0 24 24" className="h-5 w-5 text-cyan-200" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
