@@ -19,10 +19,74 @@ type FormState = {
   imageDataUrl: string;
 };
 
-const MAX_IMAGE_SIZE_BYTES = 1_300_000;
+const TARGET_IMAGE_BYTES = 480_000;
+const MAX_IMAGE_EDGE = 1600;
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function estimateDataUrlBytes(dataUrl: string) {
+  const base64 = dataUrl.split(",")[1] || "";
+  return Math.ceil((base64.length * 3) / 4);
+}
+
+function loadImageFromObjectUrl(objectUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Unable to read image"));
+    image.src = objectUrl;
+  });
+}
+
+async function compressImageToDataUrl(file: File): Promise<string> {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await loadImageFromObjectUrl(objectUrl);
+
+    const longestEdge = Math.max(image.width, image.height);
+    const baseScale = longestEdge > MAX_IMAGE_EDGE ? MAX_IMAGE_EDGE / longestEdge : 1;
+
+    let scale = baseScale;
+    let quality = 0.86;
+    let attempts = 0;
+    let dataUrl = "";
+
+    while (attempts < 6) {
+      const width = Math.max(1, Math.round(image.width * scale));
+      const height = Math.max(1, Math.round(image.height * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Canvas not available");
+      }
+
+      context.drawImage(image, 0, 0, width, height);
+      dataUrl = canvas.toDataURL("image/jpeg", quality);
+
+      if (estimateDataUrlBytes(dataUrl) <= TARGET_IMAGE_BYTES) {
+        return dataUrl;
+      }
+
+      if (quality > 0.5) {
+        quality -= 0.08;
+      } else {
+        scale *= 0.86;
+      }
+
+      attempts += 1;
+    }
+
+    return dataUrl;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 export default function EvidencePage() {
@@ -46,21 +110,19 @@ export default function EvidencePage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (file.size > MAX_IMAGE_SIZE_BYTES) {
-      setError("Image is too large. Please use a photo under 1.3MB.");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : "";
-      setForm((current) => ({ ...current, imageDataUrl: result }));
-      setError(null);
-    };
-    reader.onerror = () => {
-      setError("Could not read this image. Please try another file.");
-    };
-    reader.readAsDataURL(file);
+    void (async () => {
+      try {
+        const compressed = await compressImageToDataUrl(file);
+        if (!compressed) {
+          setError("Could not process this image. Please try another photo.");
+          return;
+        }
+        setForm((current) => ({ ...current, imageDataUrl: compressed }));
+        setError(null);
+      } catch {
+        setError("Could not process this image. Please try another photo.");
+      }
+    })();
   };
 
   const resetForm = () => {
