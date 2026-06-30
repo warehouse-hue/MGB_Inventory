@@ -93,7 +93,7 @@ export default function DashboardPage() {
               MGB OPS BOARD
             </p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Dashboard Command View
+              Dashboard Command
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
               Live snapshot of shortage pressure, purchase flow, and stock risk across the warehouse.

@@ -66,7 +66,7 @@ export default function RootLayout({
                     <path d="M4 15h16" />
                     <path d="M4 19h16" />
                   </svg>
-                  Inventory order
+                  Low/Out of Stock
                 </span>
               </Link>
               <Link className="block rounded-2xl px-4 py-3 transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-cyan-300/15" href="/products">
@@ -76,7 +76,7 @@ export default function RootLayout({
                     <path d="M20 4v16" />
                     <path d="M4 20h16" />
                   </svg>
-                  Products
+                  Add Inventory
                 </span>
               </Link>
               <Link className="block rounded-2xl px-4 py-3 transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-cyan-300/15" href="/suppliers">
@@ -97,16 +97,6 @@ export default function RootLayout({
                     <path d="M6 21h12a2 2 0 0 0 2-2V7H4v12a2 2 0 0 0 2 2z" />
                   </svg>
                   Orders
-                </span>
-              </Link>
-              <Link className="block rounded-2xl px-4 py-3 transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-cyan-300/15" href="/import">
-                <span className="inline-flex items-center gap-3">
-                  <svg viewBox="0 0 24 24" className="h-5 w-5 text-cyan-200" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 3v12" />
-                    <path d="M8 11l4 4 4-4" />
-                    <path d="M5 21h14" />
-                  </svg>
-                  Import CSV
                 </span>
               </Link>
               <Link className="block rounded-2xl px-4 py-3 transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-cyan-300/15" href="/reports">

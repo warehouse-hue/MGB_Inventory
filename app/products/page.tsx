@@ -13,6 +13,17 @@ import {
   InventoryItem,
 } from "../lib/storage";
 
+const ITEMS_PER_PAGE = 100;
+
+function safeNumber(value: unknown) {
+  const numericValue = Number(value);
+  return Number.isNaN(numericValue) ? 0 : numericValue;
+}
+
+function normalizeText(value: string | undefined) {
+  return (value || "").trim().toLowerCase();
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -43,6 +54,8 @@ export default function ProductsPage() {
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [activeCategory, setActiveCategory] = useState("All");
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const productCategories = [
     "All",
@@ -57,11 +70,6 @@ export default function ProductsPage() {
     setInventory(getInventory());
     setHydrated(true);
   }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    saveProducts(products);
-  }, [hydrated, products]);
 
   const selectedCategoryLabel =
     form.category.trim() || (activeCategory !== "All" ? activeCategory : "Misc");
@@ -78,8 +86,8 @@ export default function ProductsPage() {
       brandUses: form.brandUses.trim(),
       model: form.model.trim(),
       sizeGauge: form.sizeGauge.trim(),
-      orderQty: Number(form.orderQty) || 0,
-      minimum: form.minimum ? Number(form.minimum) : undefined,
+      orderQty: safeNumber(form.orderQty),
+      minimum: form.minimum ? safeNumber(form.minimum) : undefined,
       productCode: form.productCode.trim(),
     };
 
@@ -94,7 +102,10 @@ export default function ProductsPage() {
     ];
 
     saveInventory([...inventoryItems, ...getInventory()]);
-    setProducts((prev) => [product, ...prev]);
+  const updatedProducts = [product, ...products];
+  saveProducts(updatedProducts);
+  setProducts(updatedProducts);
+  setInventory(getInventory());
     addActivity(`Added product ${product.name}`);
     setForm({
       brandUses: "",
@@ -150,13 +161,13 @@ export default function ProductsPage() {
             model: editForm.model.trim(),
             sizeGauge: editForm.sizeGauge.trim(),
             productCode: editForm.productCode.trim(),
-            orderQty: Number(editForm.orderQty) || 0,
-            minimum: editForm.minimum ? Number(editForm.minimum) : undefined,
+            orderQty: safeNumber(editForm.orderQty),
+            minimum: editForm.minimum ? safeNumber(editForm.minimum) : undefined,
             ordered: editForm.ordered,
             orderedDate: editForm.orderedDate,
             supplier: editForm.supplier.trim(),
             lastBuyPrice: editForm.lastBuyPrice
-              ? Number(editForm.lastBuyPrice)
+              ? safeNumber(editForm.lastBuyPrice)
               : undefined,
           }
         : product
@@ -176,10 +187,10 @@ export default function ProductsPage() {
         productName:
           currentProduct.model || currentProduct.brandUses || currentProduct.sku || currentProduct.name || "Product",
         variant: currentProduct.sizeGauge || "",
-        quantity: Number(editForm.orderQty) || 0,
+        quantity: safeNumber(editForm.orderQty),
         orderedDate: editForm.orderedDate || new Date().toISOString().slice(0, 10),
         supplier: editForm.supplier.trim(),
-        lastBuyPrice: editForm.lastBuyPrice ? Number(editForm.lastBuyPrice) : undefined,
+        lastBuyPrice: editForm.lastBuyPrice ? safeNumber(editForm.lastBuyPrice) : undefined,
         status: "OPEN" as const,
       };
 
@@ -211,17 +222,77 @@ export default function ProductsPage() {
   const getProductStock = (productId: number) => {
     return inventory
       .filter((item) => item.productId === productId)
-      .reduce((sum, item) => sum + Number(item.stock || 0), 0);
+      .reduce((sum, item) => sum + safeNumber(item.stock), 0);
   };
 
-  const filteredProducts =
-    activeCategory === "All"
-      ? products
-      : products.filter((product) => product.category === activeCategory);
+  const filteredProducts = products
+    .filter((product) => {
+      const matchesCategory =
+        activeCategory === "All" || product.category === activeCategory;
+
+      const normalizedSearch = search.toLowerCase().trim();
+      if (!normalizedSearch) {
+        return matchesCategory;
+      }
+
+      const searchFields = [
+        product.name,
+        product.brandUses,
+        product.model,
+        product.sizeGauge,
+        product.productCode,
+        product.sku,
+        product.supplier,
+        product.category,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return matchesCategory && searchFields.includes(normalizedSearch);
+    })
+    .sort((left, right) => {
+      const byBrand = normalizeText(left.brandUses).localeCompare(normalizeText(right.brandUses));
+      if (byBrand !== 0) return byBrand;
+
+      const byModel = normalizeText(left.model || left.name).localeCompare(normalizeText(right.model || right.name));
+      if (byModel !== 0) return byModel;
+
+      const bySize = normalizeText(left.sizeGauge).localeCompare(normalizeText(right.sizeGauge));
+      if (bySize !== 0) return bySize;
+
+      return left.id - right.id;
+    });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeCategory, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / ITEMS_PER_PAGE));
+
+  useEffect(() => {
+    setCurrentPage((previous) => Math.min(previous, totalPages));
+  }, [totalPages]);
+
+  const paginatedFilteredProducts = filteredProducts.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const productStats = {
+    totalItems: products.length,
+    lowStock: products.filter((product) => {
+      const stock = getProductStock(product.id);
+      const threshold = Number(product.minimum ?? 0);
+      return threshold > 0 && stock > 0 && stock <= threshold;
+    }).length,
+    outOfStock: products.filter((product) => getProductStock(product.id) <= 0).length,
+    ordered: products.filter((product) => product.ordered).length,
+  };
 
   const getStockStatus = (product: Product) => {
     const stock = getProductStock(product.id);
-    const threshold = Number(product.minimum ?? 0);
+    const threshold = safeNumber(product.minimum ?? 0);
 
     if (stock <= 0) {
       return {
@@ -248,12 +319,6 @@ export default function ProductsPage() {
         badgeClass: "bg-amber-500 text-slate-950",
         fill: 65,
       };
-      return {
-        label: "Reorder soon",
-        fillClass: "bg-amber-500",
-        badgeClass: "bg-amber-500 text-slate-950",
-        fill: 65,
-      };
     }
 
     return {
@@ -266,22 +331,39 @@ export default function ProductsPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-950">Products</h1>
-        <p className="text-slate-600 mt-1">
-          Master product data and variant details synced to inventory.
-        </p>
+      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(17,94,89,0.95),rgba(8,145,178,0.86))] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.22)]">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">
+              ITEM CREATION BAY
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Add Inventory Command</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
+              Create new inventory items, assign reorder thresholds, and seed stock lines directly into the warehouse system.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <ProductStatChip label="Items" value={productStats.totalItems} tone="cyan" />
+            <ProductStatChip label="Low" value={productStats.lowStock} tone="amber" />
+            <ProductStatChip label="Zero" value={productStats.outOfStock} tone="rose" />
+            <ProductStatChip label="Ordered" value={productStats.ordered} tone="emerald" />
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_0.6fr]">
         <div className="glass-card p-6 space-y-4">
           <div>
-            <p className="text-sm uppercase tracking-[0.24em] text-slate-500">
-              Add a new product
+            <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
+              Add a new inventory item
             </p>
             <h2 className="text-xl font-semibold text-slate-950 mt-2">
-              New {selectedCategoryLabel} product
+              New {selectedCategoryLabel} item
             </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Create the product master record first, then manage stock and ordering from the linked inventory views.
+            </p>
           </div>
 
           <div className="grid gap-4">
@@ -345,13 +427,13 @@ export default function ProductsPage() {
               onClick={addProduct}
               className="rounded-2xl bg-slate-950 px-5 py-3 text-white font-semibold transition hover:bg-slate-800"
             >
-              Create product
+              Create inventory item
             </button>
           </div>
         </div>
 
         <div className="glass-card p-6">
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">
+          <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
             Inventory sync
           </p>
           <h2 className="text-xl font-semibold text-slate-950 mt-2">
@@ -364,36 +446,53 @@ export default function ProductsPage() {
       </div>
 
       <div className="glass-card p-4">
-        <div className="flex flex-wrap gap-3">
-          {productCategories.map((category) => (
-            <button
-              key={category}
-              type="button"
-              onClick={() => {
-                setActiveCategory(category);
-                if (category !== "All") {
-                  setForm((prev) => ({ ...prev, category }));
-                }
-              }}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                activeCategory === category
-                  ? "bg-slate-950 text-white"
-                  : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
-              }`}
-            >
-              {category}
-            </button>
-          ))}
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            {productCategories.map((category) => (
+              <button
+                key={category}
+                type="button"
+                onClick={() => {
+                  setActiveCategory(category);
+                  if (category !== "All") {
+                    setForm((prev) => ({ ...prev, category }));
+                  }
+                }}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  activeCategory === category
+                    ? "bg-slate-950 text-white"
+                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search products..."
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+          />
         </div>
       </div>
 
       <div className="glass-card overflow-x-auto">
-        <div className="px-6 py-4 border-b border-slate-200">
-          <p className="text-sm text-slate-500">
-            Showing {filteredProducts.length} {activeCategory === "All" ? "products" : `${activeCategory} products`}.
-          </p>
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-[0.28em] text-slate-500">
+              Inventory master table
+            </p>
+            <p className="mt-2 text-sm text-slate-500">
+              Showing page {currentPage} of {totalPages} ({filteredProducts.length} total {activeCategory === "All" ? "items" : `${activeCategory} items`}).
+            </p>
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+            <span className="h-2 w-2 rounded-full bg-cyan-500" />
+            Edit rows to manage suppliers, thresholds, and stock variants
+          </div>
         </div>
-        <table className="min-w-full text-sm text-slate-700">
+        <table className="sticky-table-header min-w-full text-sm text-slate-700">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
               <th className="p-3 text-left">Category</th>
@@ -402,7 +501,6 @@ export default function ProductsPage() {
               <th className="p-3 text-left">Size / Gauge</th>
               <th className="p-3 text-left">Current Stock</th>
               <th className="p-3 text-left">Order Qty</th>
-              <th className="p-3 text-left">Priority</th>
               <th className="p-3 text-left">Status</th>
               <th className="p-3 text-left">Ordered ✅</th>
               <th className="p-3 text-left">Ordered Date</th>
@@ -413,18 +511,17 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredProducts.map((product) => {
+            {paginatedFilteredProducts.map((product) => {
               const stockIn = getProductStock(product.id);
               return (
                 <Fragment key={product.id}>
-                  <tr className="border-t border-slate-200 hover:bg-slate-50">
+                  <tr className="border-t border-slate-200 transition hover:bg-cyan-50/35">
                     <td className="p-3 font-medium text-slate-950">{product.category || "-"}</td>
                     <td className="p-3 font-medium text-slate-950">{product.brandUses || "-"}</td>
                     <td className="p-3 text-slate-600">{product.model || "-"}</td>
                     <td className="p-3 text-slate-600">{product.sizeGauge || "-"}</td>
                     <td className="p-3 text-slate-600">{stockIn}</td>
                     <td className="p-3 text-slate-600">{product.orderQty ?? 0}</td>
-                    <td className="p-3 text-slate-600">-</td>
                     <td className="p-3 text-slate-600">
                       {(() => {
                         const status = getStockStatus(product);
@@ -500,11 +597,11 @@ export default function ProductsPage() {
                         <div className="glass-card m-4 p-6">
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                             <div>
-                              <p className="text-sm uppercase tracking-[0.24em] text-slate-500">
-                                Edit product details
+                              <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
+                                Edit inventory item
                               </p>
                               <h2 className="text-xl font-semibold text-slate-950 mt-2">
-                                {products.find((product) => product.id === editTarget)?.model || "Product details"}
+                                {products.find((product) => product.id === editTarget)?.model || "Inventory item details"}
                               </h2>
                             </div>
                             <div className="flex flex-wrap gap-3">
@@ -570,20 +667,6 @@ export default function ProductsPage() {
                                 onChange={(e) => setEditForm({ ...editForm, orderQty: e.target.value })}
                                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
                               />
-                            </div>
-                            <div>
-                              <label className="text-sm text-slate-600">Minimum threshold</label>
-                              <input
-                                type="number"
-                                min={0}
-                                value={editForm.minimum}
-                                onChange={(e) => setEditForm({ ...editForm, minimum: e.target.value })}
-                                placeholder="e.g. 10"
-                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              />
-                              <p className="mt-2 text-xs text-slate-500">
-                                Use this to flag the product for inventory ordering when stock falls below the threshold.
-                              </p>
                             </div>
                             <div>
                               <label className="text-sm text-slate-600">Minimum threshold</label>
@@ -689,7 +772,7 @@ export default function ProductsPage() {
                                       onChange={(e) =>
                                         setEditInventoryItems((prev) =>
                                           prev.map((row) =>
-                                            row.id === item.id ? { ...row, stock: Number(e.target.value) } : row
+                                            row.id === item.id ? { ...row, stock: safeNumber(e.target.value) } : row
                                           )
                                         )
                                       }
@@ -730,7 +813,52 @@ export default function ProductsPage() {
             })}
           </tbody>
         </table>
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-6 py-4">
+          {Array.from({ length: totalPages }, (_, index) => {
+            const page = index + 1;
+            const isActive = page === currentPage;
+
+            return (
+              <button
+                key={page}
+                type="button"
+                onClick={() => setCurrentPage(page)}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                  isActive
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                {page}
+              </button>
+            );
+          })}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function ProductStatChip({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "cyan" | "amber" | "rose" | "emerald";
+}) {
+  const toneClass = {
+    cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100",
+    amber: "border-amber-300/25 bg-amber-300/10 text-amber-50",
+    rose: "border-rose-300/25 bg-rose-300/10 text-rose-50",
+    emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
+  }[tone];
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] opacity-80">{label}</p>
+      <p className="mt-2 text-2xl font-semibold">{value}</p>
     </div>
   );
 }

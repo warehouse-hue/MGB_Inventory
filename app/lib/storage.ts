@@ -43,7 +43,7 @@ export type PurchaseOrder = {
   orderedDate: string;
   supplier?: string;
   lastBuyPrice?: number;
-  status: "OPEN" | "CLOSED";
+  status: "OPEN" | "DELIVERED_PENDING" | "CLOSED";
 };
 
 export type Supplier = {
@@ -53,6 +53,58 @@ export type Supplier = {
   phone: string;
   category: string;
 };
+
+const PRODUCT_CATEGORIES = [
+  "Drum Skins",
+  "Guitar Strings",
+  "Drum Sticks",
+  "Misc",
+] as const;
+
+function normalizeProductCategory(value: string | undefined) {
+  const raw = (value || "").trim();
+  if (!raw) return "Misc";
+
+  const normalized = raw.toLowerCase();
+
+  if (normalized === "drum skins" || normalized === "drum skin") return "Drum Skins";
+  if (normalized === "guitar strings" || normalized === "guitar string") return "Guitar Strings";
+  if (normalized === "drum sticks" || normalized === "drum stick") return "Drum Sticks";
+  if (normalized === "misc") return "Misc";
+
+  if (
+    /(drum\s?head|drum\s?skin|snare\s?head|tom\s?head|kick\s?head|bass\s?drum\s?head|remo|evans|aquarian|emperor)/.test(
+      normalized
+    )
+  ) {
+    return "Drum Skins";
+  }
+
+  if (
+    /(guitar\s?string|string\s?set|electric\s?string|acoustic\s?string|bass\s?string|ernie\s?ball|daddario|elixir|phosphor\s?bronze|nickel\s?wound)/.test(
+      normalized
+    )
+  ) {
+    return "Guitar Strings";
+  }
+
+  if (
+    /(drum\s?stick|drumstick|stick\s?pair|vic\s?firth|promark|vater|ahead|nylon\s?tip|wood\s?tip|\b[257]a\b|\b2b\b|\b5b\b)/.test(
+      normalized
+    )
+  ) {
+    return "Drum Sticks";
+  }
+
+  return "Misc";
+}
+
+function normalizeProduct(product: Product): Product {
+  return {
+    ...product,
+    category: normalizeProductCategory(product.category),
+  };
+}
 
 /* ---------------- SAFE STORAGE ---------------- */
 function safeNumber(value: any): number {
@@ -75,11 +127,12 @@ function safeSet(key: string, value: unknown) {
 /* ---------------- PRODUCTS ---------------- */
 
 export function getProducts(): Product[] {
-  return safeGet<Product[]>("mgb-products", []);
+  const products = safeGet<Product[]>("mgb-products", []);
+  return products.map(normalizeProduct);
 }
 
 export function saveProducts(products: Product[]) {
-  safeSet("mgb-products", products);
+  safeSet("mgb-products", products.map(normalizeProduct));
 }
 
 export function addProduct(product: Product) {

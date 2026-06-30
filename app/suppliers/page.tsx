@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getSuppliers, saveSuppliers, addSupplier, addActivity, Supplier } from "../lib/storage";
 
 type LocalSupplier = Supplier;
 
 const initialSuppliers: LocalSupplier[] = [];
+const ITEMS_PER_PAGE = 100;
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<LocalSupplier[]>(initialSuppliers);
@@ -17,6 +18,7 @@ export default function SuppliersPage() {
     category: "",
   });
   const [editId, setEditId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     const saved = getSuppliers();
@@ -88,24 +90,59 @@ export default function SuppliersPage() {
     supplier.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+
+  useEffect(() => {
+    setCurrentPage((previous) => Math.min(previous, totalPages));
+  }, [totalPages]);
+
+  const paginatedFiltered = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filtered, currentPage]);
+
+  const supplierStats = {
+    total: suppliers.length,
+    visible: filtered.length,
+    withEmail: suppliers.filter((supplier) => Boolean(supplier.email.trim())).length,
+    withPhone: suppliers.filter((supplier) => Boolean(supplier.phone.trim())).length,
+  };
+
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-950">Suppliers</h1>
-        <p className="text-slate-600 mt-1">
-          Manage your supplier contacts and vendor categories easily.
-        </p>
+      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(51,65,85,0.96),rgba(14,165,233,0.82))] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.2)]">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">VENDOR DIRECTORY</p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Suppliers Command</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
+              Maintain supplier contacts, vendor categories, and fast lookup details for reorders and purchasing.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <SupplierChip label="Total" value={supplierStats.total} tone="cyan" />
+            <SupplierChip label="Visible" value={supplierStats.visible} tone="slate" />
+            <SupplierChip label="Emails" value={supplierStats.withEmail} tone="emerald" />
+            <SupplierChip label="Phones" value={supplierStats.withPhone} tone="sky" />
+          </div>
+        </div>
       </div>
 
       <div className="glass-card p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <p className="text-sm uppercase tracking-[0.24em] text-slate-500">
+            <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
               Supplier directory
             </p>
             <h2 className="text-xl font-semibold text-slate-950 mt-2">
               Find vendor details quickly
             </h2>
+            <p className="mt-2 text-sm text-slate-600">Search the active supplier list or add a new vendor record below.</p>
           </div>
 
           <input
@@ -118,7 +155,7 @@ export default function SuppliersPage() {
 
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-4">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">
+            <p className="font-mono text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">
               Add supplier
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -170,9 +207,14 @@ export default function SuppliersPage() {
         </div>
       </div>
 
+      <div className="flex items-center justify-between px-1">
+        <p className="font-mono text-xs uppercase tracking-[0.28em] text-slate-500">Supplier cards</p>
+        <p className="text-sm text-slate-500">Page {currentPage} of {totalPages} ({filtered.length} supplier record(s) visible)</p>
+      </div>
+
       <div className="grid md:grid-cols-2 gap-4">
-        {filtered.map((supplier) => (
-          <div key={supplier.id} className="glass-card p-5">
+        {paginatedFiltered.map((supplier) => (
+          <div key={supplier.id} className="glass-card p-5 transition hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between gap-4">
               <h3 className="text-lg font-semibold text-slate-950">{supplier.name}</h3>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
@@ -200,6 +242,51 @@ export default function SuppliersPage() {
           </div>
         ))}
       </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {Array.from({ length: totalPages }, (_, index) => {
+          const page = index + 1;
+          const isActive = page === currentPage;
+
+          return (
+            <button
+              key={page}
+              type="button"
+              onClick={() => setCurrentPage(page)}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                isActive
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              {page}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SupplierChip({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "cyan" | "slate" | "emerald" | "sky";
+}) {
+  const toneClass = {
+    cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100",
+    slate: "border-white/15 bg-white/8 text-white",
+    emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
+    sky: "border-sky-300/25 bg-sky-300/10 text-sky-50",
+  }[tone];
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] opacity-80">{label}</p>
+      <p className="mt-2 text-2xl font-semibold">{value}</p>
     </div>
   );
 }

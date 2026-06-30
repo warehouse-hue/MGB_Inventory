@@ -21,15 +21,24 @@ function safeNumber(value: any) {
   return isNaN(n) ? 0 : n;
 }
 
+function normalizeText(value: string | undefined) {
+  return (value || "").trim().toLowerCase();
+}
+
 /* Stable ID generator (prevents collisions) */
 function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+type StatusFilter = "ALL" | "LOW" | "OUT" | "ORDERED";
+const ITEMS_PER_PAGE = 100;
+
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
+  const [activeStatusFilter, setActiveStatusFilter] = useState<StatusFilter>("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
   const [selected, setSelected] = useState<InventoryItem | null>(null);
   const [restockAmount, setRestockAmount] = useState(1);
   const categoryTabs = ["All", "Drum Skins", "Guitar Strings", "Drum Sticks", "Misc"];
@@ -39,17 +48,102 @@ export default function InventoryPage() {
     setItems(getInventory());
   }, []);
 
+  const matchesStatusFilter = (item: InventoryItem, product: Product | undefined) => {
+    const stock = safeNumber(item.stock);
+    const threshold = Number(product?.minimum ?? 0);
+
+    if (activeStatusFilter === "LOW") {
+      return stock > 0 && threshold > 0 && stock <= threshold;
+    }
+
+    if (activeStatusFilter === "OUT") {
+      return stock <= 0;
+    }
+
+    if (activeStatusFilter === "ORDERED") {
+      return Boolean(product?.ordered);
+    }
+
+    return true;
+  };
+
   /* FILTER */
   const filtered = useMemo(() => {
-    return items.filter((item) => {
+    const matches = items.filter((item) => {
       const product = getProductById(item.productId);
-      const matchesSearch = product?.name?.toLowerCase().includes(search.toLowerCase());
+      const normalizedSearch = search.toLowerCase().trim();
+      const searchFields = [
+        product?.brandUses,
+        product?.model,
+        product?.sizeGauge,
+        item.variant,
+        product?.name,
+        product?.productCode,
+        product?.sku,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const matchesSearch = !normalizedSearch || searchFields.includes(normalizedSearch);
       const matchesCategory =
         activeCategory === "All" || (product?.category || "") === activeCategory;
+      const matchesStatus = matchesStatusFilter(item, product);
 
-      return Boolean(matchesSearch) && matchesCategory;
+      return Boolean(matchesSearch) && matchesCategory && matchesStatus;
     });
-  }, [items, search, activeCategory]);
+
+    return matches.sort((left, right) => {
+      const leftProduct = getProductById(left.productId);
+      const rightProduct = getProductById(right.productId);
+
+      const byBrand = normalizeText(leftProduct?.brandUses).localeCompare(normalizeText(rightProduct?.brandUses));
+      if (byBrand !== 0) return byBrand;
+
+      const byModel = normalizeText(leftProduct?.model || leftProduct?.name).localeCompare(
+        normalizeText(rightProduct?.model || rightProduct?.name)
+      );
+      if (byModel !== 0) return byModel;
+
+      const bySize = normalizeText(leftProduct?.sizeGauge || left.variant).localeCompare(
+        normalizeText(rightProduct?.sizeGauge || right.variant)
+      );
+      if (bySize !== 0) return bySize;
+
+      return left.id - right.id;
+    });
+  }, [items, search, activeCategory, activeStatusFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, activeCategory, activeStatusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+
+  useEffect(() => {
+    setCurrentPage((previous) => Math.min(previous, totalPages));
+  }, [totalPages]);
+
+  const paginatedFiltered = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filtered, currentPage]);
+
+  const inventoryStats = useMemo(() => {
+    const totalUnits = items.reduce((sum, item) => sum + safeNumber(item.stock), 0);
+    const openOrders = getOrders().filter((order) => order.status === "OPEN");
+
+    return {
+      trackedLines: items.length,
+      totalUnits,
+      lowStock: items.filter((item) => {
+        const product = getProductById(item.productId);
+        const threshold = Number(product?.minimum ?? 0);
+        return safeNumber(item.stock) > 0 && threshold > 0 && safeNumber(item.stock) <= threshold;
+      }).length,
+      outOfStock: items.filter((item) => safeNumber(item.stock) <= 0).length,
+      openOrders: openOrders.length,
+    };
+  }, [items]);
 
   const getStockStatus = (item: InventoryItem, product: Product | undefined) => {
     const stock = safeNumber(item.stock);
@@ -220,11 +314,50 @@ export default function InventoryPage() {
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
 
       {/* HEADER */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-950">Inventory</h1>
-        <p className="text-slate-600 mt-1">
-          Product-linked warehouse stock system with live restock controls.
-        </p>
+      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(12,74,110,0.95),rgba(8,145,178,0.88))] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.24)]">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">
+              STOCK CONTROL GRID
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory Command</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
+              Live warehouse stock view with fast filtering, line-by-line status, and direct restock controls.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <StatChip
+              label="Lines"
+              value={inventoryStats.trackedLines}
+              tone="cyan"
+              isActive={activeStatusFilter === "ALL"}
+              onClick={() => setActiveStatusFilter("ALL")}
+            />
+            <StatChip label="Units" value={inventoryStats.totalUnits} tone="slate" />
+            <StatChip
+              label="Low"
+              value={inventoryStats.lowStock}
+              tone="amber"
+              isActive={activeStatusFilter === "LOW"}
+              onClick={() => setActiveStatusFilter("LOW")}
+            />
+            <StatChip
+              label="Zero"
+              value={inventoryStats.outOfStock}
+              tone="rose"
+              isActive={activeStatusFilter === "OUT"}
+              onClick={() => setActiveStatusFilter("OUT")}
+            />
+            <StatChip
+              label="POs"
+              value={inventoryStats.openOrders}
+              tone="sky"
+              isActive={activeStatusFilter === "ORDERED"}
+              onClick={() => setActiveStatusFilter("ORDERED")}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
@@ -232,19 +365,22 @@ export default function InventoryPage() {
           <div className="glass-card p-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-500">
+                <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
                   Inventory search
                 </p>
                 <h2 className="text-xl font-semibold text-slate-950 mt-2">
                   Find product stock fast
                 </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Filter live stock lines by category or search by product name.
+                </p>
               </div>
 
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search products..."
-                className="w-full sm:w-80 px-4 py-3 border border-slate-200 rounded-2xl bg-slate-50 text-slate-900 outline-none focus:ring-2 focus:ring-sky-400"
+                className="w-full sm:w-80 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-400"
               />
             </div>
           </div>
@@ -258,7 +394,7 @@ export default function InventoryPage() {
                   onClick={() => setActiveCategory(category)}
                   className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                     activeCategory === category
-                      ? "bg-slate-950 text-white"
+                      ? "bg-slate-950 text-white shadow-sm"
                       : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
                   }`}
                 >
@@ -269,12 +405,28 @@ export default function InventoryPage() {
           </div>
 
           <div className="glass-card overflow-x-auto">
-            <div className="px-6 py-4 border-b border-slate-200">
-              <p className="text-sm text-slate-500">
-                Showing {filtered.length} {activeCategory === "All" ? "items" : `${activeCategory} items`}.
-              </p>
+            <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-mono text-xs uppercase tracking-[0.28em] text-slate-500">
+                  Live stock table
+                </p>
+                <p className="mt-2 text-sm text-slate-500">
+                  Showing page {currentPage} of {totalPages} ({filtered.length} total {activeCategory === "All" ? "items" : `${activeCategory} items`})
+                  {activeStatusFilter === "LOW"
+                    ? " in low stock"
+                    : activeStatusFilter === "OUT"
+                      ? " out of stock"
+                      : activeStatusFilter === "ORDERED"
+                        ? " marked ordered"
+                        : ""}.
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+                <span className="h-2 w-2 rounded-full bg-cyan-500" />
+                Click any row for stock controls
+              </div>
             </div>
-            <table className="min-w-full text-sm text-slate-700">
+            <table className="sticky-table-header min-w-full text-sm text-slate-700">
               <thead className="bg-slate-100 text-slate-600">
                 <tr>
                   <th className="p-3 text-left">Category</th>
@@ -283,7 +435,6 @@ export default function InventoryPage() {
                   <th className="p-3 text-left">Size / Gauge</th>
                   <th className="p-3 text-left">Current Stock</th>
                   <th className="p-3 text-left">Order Qty</th>
-                  <th className="p-3 text-left">Priority</th>
                   <th className="p-3 text-left">Status</th>
                   <th className="p-3 text-left">Ordered ✅</th>
                   <th className="p-3 text-left">Ordered Date</th>
@@ -293,7 +444,7 @@ export default function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((item) => {
+                {paginatedFiltered.map((item) => {
                   const product = getProductById(item.productId);
                   const status = getStockStatus(item, product);
 
@@ -301,7 +452,7 @@ export default function InventoryPage() {
                     <tr
                       key={item.id}
                       onClick={() => setSelected(item)}
-                      className="border-t border-slate-200 hover:bg-slate-50 cursor-pointer"
+                      className={`cursor-pointer border-t border-slate-200 transition hover:bg-slate-50 ${selected?.id === item.id ? "bg-cyan-50/70" : ""}`}
                     >
                       <td className="p-3 font-medium text-slate-950">{product?.category || "-"}</td>
                       <td className="p-3 font-medium text-slate-950">
@@ -311,7 +462,6 @@ export default function InventoryPage() {
                       <td className="p-3 text-slate-600">{product?.sizeGauge || item.variant || "-"}</td>
                       <td className="p-3 text-slate-600">{safeNumber(item.stock)}</td>
                       <td className="p-3 text-slate-600">{product?.orderQty ?? 0}</td>
-                      <td className="p-3 text-slate-600">-</td>
                       <td className="p-3 text-slate-600">
                         <div className="inline-flex items-center gap-2">
                           <span className="inline-flex h-5 w-10 items-center rounded-full border border-slate-300 bg-slate-100 p-0.5">
@@ -357,87 +507,162 @@ export default function InventoryPage() {
                 })}
               </tbody>
             </table>
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-6 py-4">
+              {Array.from({ length: totalPages }, (_, index) => {
+                const page = index + 1;
+                const isActive = page === currentPage;
+
+                return (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                      isActive
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {selected && (
-          <div className="glass-card p-6 shadow-lg">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-500">
-                  Inventory detail
-                </p>
-                <h2 className="text-xl font-semibold text-slate-950 mt-2">
-                  {getProductById(selected.productId)?.model || getProductById(selected.productId)?.name}
-                </h2>
-              </div>
-              <button
-                onClick={() => setSelected(null)}
-                className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-3xl bg-slate-50 p-4 border border-slate-200">
-                <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Current Stock</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-950">{safeNumber(selected.stock)}</p>
-              </div>
-              <div className="rounded-3xl bg-slate-50 p-4 border border-slate-200">
-                <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Ordered</p>
-                <label className="mt-2 inline-flex items-center gap-2 text-slate-900">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(selectedProduct?.ordered)}
-                    onChange={(e) => {
-                      const product = setOrderedFlag(selected.productId, e.target.checked);
-                      syncOrderForProduct(product);
-                      setItems(getInventory());
-                    }}
-                    className="h-4 w-4 rounded border-slate-300 text-slate-900"
-                  />
-                  {selectedProduct?.ordered ? "Yes" : "No"}
-                </label>
-              </div>
-            </div>
-
-            <div className="rounded-3xl bg-slate-50 p-4 border border-slate-200">
-              <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Adjust stock</p>
-              <div className="mt-4 grid gap-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => updateStock(selected.id, -1)}
-                    className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-600"
-                  >
-                    -1
-                  </button>
-                  <button
-                    onClick={() => updateStock(selected.id, 1)}
-                    className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
-                  >
-                    +1
-                  </button>
+        <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+          {selected ? (
+            <div className="rounded-[2rem] border border-slate-900 bg-slate-950 p-6 text-white shadow-[0_24px_60px_rgba(8,15,24,0.24)]">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-mono text-sm uppercase tracking-[0.24em] text-cyan-300/75">
+                    Inventory detail
+                  </p>
+                  <h2 className="mt-2 text-xl font-semibold text-white">
+                    {getProductById(selected.productId)?.model || getProductById(selected.productId)?.name}
+                  </h2>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={restockAmount}
-                    onChange={(e) => setRestockAmount(Number(e.target.value))}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-slate-900"
-                  />
-                  <button
-                    onClick={() => restock(selected.id, restockAmount)}
-                    className="rounded-2xl bg-slate-900 px-4 py-2 text-white transition hover:bg-slate-800"
-                  >
-                    Restock
-                  </button>
+                <button
+                  onClick={() => setSelected(null)}
+                  className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-200 transition hover:bg-white/10"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-3xl border border-cyan-400/15 bg-white/5 p-4">
+                  <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-400">Current Stock</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{safeNumber(selected.stock)}</p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-400">Ordered</p>
+                  <label className="mt-2 inline-flex items-center gap-2 text-slate-100">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedProduct?.ordered)}
+                      onChange={(e) => {
+                        const product = setOrderedFlag(selected.productId, e.target.checked);
+                        syncOrderForProduct(product);
+                        setItems(getInventory());
+                      }}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                    />
+                    {selectedProduct?.ordered ? "Yes" : "No"}
+                  </label>
                 </div>
               </div>
+
+              <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-400">Adjust stock</p>
+                <div className="mt-4 grid gap-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateStock(selected.id, -1)}
+                      className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-600"
+                    >
+                      -1
+                    </button>
+                    <button
+                      onClick={() => updateStock(selected.id, 1)}
+                      className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                    >
+                      +1
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={restockAmount}
+                      onChange={(e) => setRestockAmount(Number(e.target.value))}
+                      className="w-full rounded-2xl border border-white/10 bg-white px-4 py-2 text-slate-900"
+                    />
+                    <button
+                      onClick={() => restock(selected.id, restockAmount)}
+                      className="rounded-2xl bg-cyan-400 px-4 py-2 font-semibold text-slate-950 transition hover:bg-cyan-300"
+                    >
+                      Restock
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white/60 p-6 text-slate-600 shadow-sm backdrop-blur-sm">
+              <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Inventory detail</p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950">Select a stock line</h2>
+              <p className="mt-3 text-sm leading-6">
+                Click any inventory row to inspect stock state, toggle ordered status, or run a quick restock.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function StatChip({
+  label,
+  value,
+  tone,
+  isActive = false,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  tone: "cyan" | "slate" | "amber" | "rose" | "sky";
+  isActive?: boolean;
+  onClick?: () => void;
+}) {
+  const toneClass = {
+    cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100",
+    slate: "border-white/15 bg-white/8 text-white",
+    amber: "border-amber-300/25 bg-amber-300/10 text-amber-50",
+    rose: "border-rose-300/25 bg-rose-300/10 text-rose-50",
+    sky: "border-sky-300/25 bg-sky-300/10 text-sky-50",
+  }[tone];
+
+  const activeClass = isActive ? "ring-2 ring-white/70 ring-offset-2 ring-offset-slate-900" : "";
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:bg-white/15 ${toneClass} ${activeClass}`}
+      >
+        <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] opacity-80">{label}</p>
+        <p className="mt-2 text-2xl font-semibold">{value}</p>
+      </button>
+    );
+  }
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] opacity-80">{label}</p>
+      <p className="mt-2 text-2xl font-semibold">{value}</p>
     </div>
   );
 }
