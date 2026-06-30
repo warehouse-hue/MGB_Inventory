@@ -10,9 +10,15 @@ export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const namespace = process.env.NEXT_PUBLIC_SYNC_NAMESPACE;
+  const interestingKeys = Object.keys(process.env)
+    .filter((key) =>
+      /NEXT_PUBLIC|SUPABASE|SYNC/i.test(key)
+    )
+    .sort();
 
   return Response.json({
     ok: Boolean(url && anonKey),
+    foundEnvKeys: interestingKeys,
     env: {
       NEXT_PUBLIC_SUPABASE_URL: {
         present: Boolean(url),
