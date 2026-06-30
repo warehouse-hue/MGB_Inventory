@@ -1,4 +1,5 @@
-const CLOUD_UPDATED_AT_KEY = "mgb-cloud-updated-at";
+const CLOUD_UPDATED_AT_PREFIX = "mgb-cloud-updated-at";
+const LEGACY_CLOUD_UPDATED_AT_KEY = "mgb-cloud-updated-at";
 
 const STORAGE_KEYS = [
   "mgb-products",
@@ -52,6 +53,23 @@ function getNamespace() {
     process.env.NEXT_PUBLIC_SNAPSHOT_NAMESPACE ||
     "default"
   );
+}
+
+function getCloudUpdatedAtKey() {
+  return `${CLOUD_UPDATED_AT_PREFIX}:${getNamespace()}`;
+}
+
+function readCloudUpdatedAt() {
+  const namespaced = localStorage.getItem(getCloudUpdatedAtKey());
+  const legacy = localStorage.getItem(LEGACY_CLOUD_UPDATED_AT_KEY);
+  return Number(namespaced || legacy || "0");
+}
+
+function writeCloudUpdatedAt(value: number) {
+  const asString = String(value);
+  localStorage.setItem(getCloudUpdatedAtKey(), asString);
+  // Keep legacy key in sync so existing installs migrate without odd timestamp jumps.
+  localStorage.setItem(LEGACY_CLOUD_UPDATED_AT_KEY, asString);
 }
 
 function getHeaders() {
@@ -137,7 +155,7 @@ async function upsertRemoteSnapshot(snapshot: Snapshot) {
     throw new Error(`Cloud write failed (${response.status}): ${text}`);
   }
 
-  localStorage.setItem(CLOUD_UPDATED_AT_KEY, String(Date.now()));
+  writeCloudUpdatedAt(Date.now());
 }
 
 export async function pullCloudSnapshot() {
@@ -146,12 +164,14 @@ export async function pullCloudSnapshot() {
   const remote = await getRemoteRow();
   if (!remote?.payload || !hasData(remote.payload)) return;
 
+  const localSnapshot = readLocalSnapshot();
+  const localHasData = hasData(localSnapshot);
   const remoteTs = Date.parse(remote.updated_at || "");
-  const localTs = Number(localStorage.getItem(CLOUD_UPDATED_AT_KEY) || "0");
+  const localTs = readCloudUpdatedAt();
 
-  if (!localTs || remoteTs >= localTs) {
+  if (!localHasData || !localTs || remoteTs >= localTs) {
     writeLocalSnapshot(remote.payload);
-    localStorage.setItem(CLOUD_UPDATED_AT_KEY, String(remoteTs || Date.now()));
+    writeCloudUpdatedAt(remoteTs || Date.now());
   }
 }
 
@@ -165,12 +185,13 @@ export async function bootstrapCloudSync() {
         const localSnapshot = readLocalSnapshot();
 
         if (remote?.payload && hasData(remote.payload)) {
+          const localHasData = hasData(localSnapshot);
           const remoteTs = Date.parse(remote.updated_at || "");
-          const localTs = Number(localStorage.getItem(CLOUD_UPDATED_AT_KEY) || "0");
+          const localTs = readCloudUpdatedAt();
 
-          if (!localTs || remoteTs >= localTs) {
+          if (!localHasData || !localTs || remoteTs >= localTs) {
             writeLocalSnapshot(remote.payload);
-            localStorage.setItem(CLOUD_UPDATED_AT_KEY, String(remoteTs || Date.now()));
+            writeCloudUpdatedAt(remoteTs || Date.now());
             return;
           }
         }
