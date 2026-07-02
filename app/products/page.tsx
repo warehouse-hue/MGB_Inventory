@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   getProducts,
   saveProducts,
@@ -9,6 +9,7 @@ import {
   getOrders,
   saveOrders,
   addActivity,
+  generateId,
   Product,
   InventoryItem,
 } from "../lib/storage";
@@ -49,7 +50,7 @@ export default function ProductsPage() {
     supplier: "",
     lastBuyPrice: "",
   });
-  const [editInventoryItems, setEditInventoryItems] = useState<InventoryItem[]>([]);
+  const [editCurrentStock, setEditCurrentStock] = useState("0");
   const [showMinimumSettings, setShowMinimumSettings] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -60,8 +61,13 @@ export default function ProductsPage() {
   const productCategories = [
     "All",
     "Drum Skins",
+    "Percussion Skins",
     "Guitar Strings",
+    "Guitar Accessories",
     "Drum Sticks",
+    "Drum Accessories",
+    "Batteries",
+    "Tape",
     "Misc",
   ];
 
@@ -71,6 +77,14 @@ export default function ProductsPage() {
     setHydrated(true);
   }, []);
 
+  const stockByProductId = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const item of inventory) {
+      map.set(item.productId, (map.get(item.productId) ?? 0) + safeNumber(item.stock));
+    }
+    return map;
+  }, [inventory]);
+
   const selectedCategoryLabel =
     form.category.trim() || (activeCategory !== "All" ? activeCategory : "Misc");
 
@@ -78,8 +92,10 @@ export default function ProductsPage() {
     const categoryValue = selectedCategoryLabel;
     if (!categoryValue || (!form.model.trim() && !form.productCode.trim())) return;
 
+    const newProductId = generateId();
+
     const product: Product = {
-      id: Date.now(),
+      id: newProductId,
       name: form.model.trim() || form.productCode.trim(),
       sku: form.productCode.trim() || form.model.trim() || "UNKNOWN",
       category: categoryValue,
@@ -93,7 +109,7 @@ export default function ProductsPage() {
 
     const inventoryItems: InventoryItem[] = [
       {
-        id: Date.now(),
+        id: generateId(),
         productId: product.id,
         variant: product.sizeGauge || "",
         stock: 0,
@@ -101,11 +117,12 @@ export default function ProductsPage() {
       },
     ];
 
-    saveInventory([...inventoryItems, ...getInventory()]);
-  const updatedProducts = [product, ...products];
-  saveProducts(updatedProducts);
-  setProducts(updatedProducts);
-  setInventory(getInventory());
+    const updatedInventory = [...inventoryItems, ...inventory];
+    saveInventory(updatedInventory);
+    const updatedProducts = [product, ...products];
+    saveProducts(updatedProducts);
+    setProducts(updatedProducts);
+    setInventory(updatedInventory);
     addActivity(`Added product ${product.name}`);
     setForm({
       brandUses: "",
@@ -136,7 +153,7 @@ export default function ProductsPage() {
       brandUses: product.brandUses || "",
       model: product.model || "",
       sizeGauge: product.sizeGauge || "",
-      productCode: product.productCode || product.sku || "",
+      productCode: product.productCode || "",
       orderQty: String(product.orderQty ?? 0),
       minimum: product.minimum != null ? String(product.minimum) : "",
       ordered: Boolean(product.ordered),
@@ -144,7 +161,10 @@ export default function ProductsPage() {
       supplier: product.supplier || "",
       lastBuyPrice: product.lastBuyPrice != null ? String(product.lastBuyPrice) : "",
     });
-    setEditInventoryItems(getInventory().filter((item) => item.productId === product.id));
+    const currentStock = inventory
+      .filter((item) => item.productId === product.id)
+      .reduce((sum, item) => sum + safeNumber(item.stock), 0);
+    setEditCurrentStock(String(currentStock));
   };
 
   const saveProductEdits = () => {
@@ -177,12 +197,13 @@ export default function ProductsPage() {
     setProducts(updatedProducts);
     addActivity(`Updated product ${currentProduct.name}`);
 
-    const existingOrder = getOrders().find((order) => order.productId === editTarget);
-    let updatedOrders = getOrders();
+    const currentOrders = getOrders();
+    const existingOrder = currentOrders.find((order) => order.productId === editTarget);
+    let updatedOrders = currentOrders;
 
     if (editForm.ordered) {
       const order = {
-        id: existingOrder?.id ?? Date.now(),
+        id: existingOrder?.id ?? generateId(),
         productId: editTarget,
         productName:
           currentProduct.model || currentProduct.brandUses || currentProduct.sku || currentProduct.name || "Product",
@@ -205,13 +226,19 @@ export default function ProductsPage() {
 
     saveOrders(updatedOrders);
 
-    const existingInventory = getInventory().filter((item) => item.productId !== editTarget);
+    const currentStock = Math.max(0, safeNumber(editCurrentStock));
+    const existingForProduct = inventory.filter((item) => item.productId === editTarget);
+    const baseRow = existingForProduct[0];
+
     const updatedInventory = [
-      ...existingInventory,
-      ...editInventoryItems.map((item) => ({
-        ...item,
+      ...inventory.filter((item) => item.productId !== editTarget),
+      {
+        id: baseRow?.id ?? generateId(),
         productId: editTarget,
-      })),
+        variant: baseRow?.variant || currentProduct.sizeGauge || "",
+        stock: currentStock,
+        location: baseRow?.location || "Main Warehouse",
+      },
     ];
 
     saveInventory(updatedInventory);
@@ -220,49 +247,49 @@ export default function ProductsPage() {
   };
 
   const getProductStock = (productId: number) => {
-    return inventory
-      .filter((item) => item.productId === productId)
-      .reduce((sum, item) => sum + safeNumber(item.stock), 0);
+    return stockByProductId.get(productId) ?? 0;
   };
 
-  const filteredProducts = products
-    .filter((product) => {
-      const matchesCategory =
-        activeCategory === "All" || product.category === activeCategory;
+  const filteredProducts = useMemo(() => {
+    return products
+      .filter((product) => {
+        const matchesCategory =
+          activeCategory === "All" || product.category === activeCategory;
 
-      const normalizedSearch = search.toLowerCase().trim();
-      if (!normalizedSearch) {
-        return matchesCategory;
-      }
+        const normalizedSearch = search.toLowerCase().trim();
+        if (!normalizedSearch) {
+          return matchesCategory;
+        }
 
-      const searchFields = [
-        product.name,
-        product.brandUses,
-        product.model,
-        product.sizeGauge,
-        product.productCode,
-        product.sku,
-        product.supplier,
-        product.category,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+        const searchFields = [
+          product.name,
+          product.brandUses,
+          product.model,
+          product.sizeGauge,
+          product.productCode,
+          product.sku,
+          product.supplier,
+          product.category,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
 
-      return matchesCategory && searchFields.includes(normalizedSearch);
-    })
-    .sort((left, right) => {
-      const byBrand = normalizeText(left.brandUses).localeCompare(normalizeText(right.brandUses));
-      if (byBrand !== 0) return byBrand;
+        return matchesCategory && searchFields.includes(normalizedSearch);
+      })
+      .sort((left, right) => {
+        const byBrand = normalizeText(left.brandUses).localeCompare(normalizeText(right.brandUses));
+        if (byBrand !== 0) return byBrand;
 
-      const byModel = normalizeText(left.model || left.name).localeCompare(normalizeText(right.model || right.name));
-      if (byModel !== 0) return byModel;
+        const byModel = normalizeText(left.model || left.name).localeCompare(normalizeText(right.model || right.name));
+        if (byModel !== 0) return byModel;
 
-      const bySize = normalizeText(left.sizeGauge).localeCompare(normalizeText(right.sizeGauge));
-      if (bySize !== 0) return bySize;
+        const bySize = normalizeText(left.sizeGauge).localeCompare(normalizeText(right.sizeGauge));
+        if (bySize !== 0) return bySize;
 
-      return left.id - right.id;
-    });
+        return left.id - right.id;
+      });
+  }, [products, activeCategory, search]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -274,21 +301,25 @@ export default function ProductsPage() {
     setCurrentPage((previous) => Math.min(previous, totalPages));
   }, [totalPages]);
 
-  const paginatedFilteredProducts = filteredProducts.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  const paginatedFilteredProducts = useMemo(() => {
+    return filteredProducts.slice(
+      (currentPage - 1) * ITEMS_PER_PAGE,
+      currentPage * ITEMS_PER_PAGE
+    );
+  }, [filteredProducts, currentPage]);
 
-  const productStats = {
-    totalItems: products.length,
-    lowStock: products.filter((product) => {
-      const stock = getProductStock(product.id);
-      const threshold = Number(product.minimum ?? 0);
-      return threshold > 0 && stock > 0 && stock <= threshold;
-    }).length,
-    outOfStock: products.filter((product) => getProductStock(product.id) <= 0).length,
-    ordered: products.filter((product) => product.ordered).length,
-  };
+  const productStats = useMemo(() => {
+    return {
+      totalItems: products.length,
+      lowStock: products.filter((product) => {
+        const stock = getProductStock(product.id);
+        const threshold = Number(product.minimum ?? 0);
+        return threshold > 0 && stock > 0 && stock <= threshold;
+      }).length,
+      outOfStock: products.filter((product) => getProductStock(product.id) <= 0).length,
+      ordered: products.filter((product) => product.ordered).length,
+    };
+  }, [products, stockByProductId]);
 
   const getStockStatus = (product: Product) => {
     const stock = getProductStock(product.id);
@@ -306,8 +337,8 @@ export default function ProductsPage() {
     if (threshold > 0 && stock <= threshold) {
       return {
         label: "Low stock",
-        fillClass: "bg-amber-500",
-        badgeClass: "bg-amber-500 text-slate-950",
+        fillClass: "bg-amber-600",
+        badgeClass: "bg-amber-600 text-white",
         fill: 35,
       };
     }
@@ -315,8 +346,8 @@ export default function ProductsPage() {
     if (threshold > 0 && stock <= threshold * 1.5) {
       return {
         label: "Reorder soon",
-        fillClass: "bg-amber-500",
-        badgeClass: "bg-amber-500 text-slate-950",
+        fillClass: "bg-amber-600",
+        badgeClass: "bg-amber-600 text-white",
         fill: 65,
       };
     }
@@ -500,7 +531,6 @@ export default function ProductsPage() {
               <th className="p-3 text-left">Model</th>
               <th className="p-3 text-left">Size / Gauge</th>
               <th className="p-3 text-left">Current Stock</th>
-              <th className="p-3 text-left">Order Qty</th>
               <th className="p-3 text-left">Status</th>
               <th className="p-3 text-left">Ordered ✅</th>
               <th className="p-3 text-left">Ordered Date</th>
@@ -520,8 +550,7 @@ export default function ProductsPage() {
                     <td className="p-3 font-medium text-slate-950">{product.brandUses || "-"}</td>
                     <td className="p-3 text-slate-600">{product.model || "-"}</td>
                     <td className="p-3 text-slate-600">{product.sizeGauge || "-"}</td>
-                    <td className="p-3 text-slate-600">{stockIn}</td>
-                    <td className="p-3 text-slate-600">{product.orderQty ?? 0}</td>
+                    <td className="p-3 font-semibold underline decoration-2 underline-offset-2 text-slate-700">{stockIn}</td>
                     <td className="p-3 text-slate-600">
                       {(() => {
                         const status = getStockStatus(product);
@@ -550,7 +579,7 @@ export default function ProductsPage() {
                       </span>
                     </td>
                     <td className="p-3 text-slate-600">{product.orderedDate || "-"}</td>
-                    <td className="p-3 text-slate-600">{product.productCode || product.sku || "-"}</td>
+                    <td className="p-3 text-slate-600">{product.productCode || "-"}</td>
                     <td className="p-3 text-slate-600">{product.supplier || "-"}</td>
                     <td className="p-3 text-slate-600">{product.lastBuyPrice != null ? `$${product.lastBuyPrice.toFixed(2)}` : "-"}</td>
                     <td className="p-3">
@@ -593,7 +622,7 @@ export default function ProductsPage() {
                   </tr>
                   {editTarget === product.id ? (
                     <tr className="bg-slate-50">
-                      <td colSpan={14} className="p-0">
+                      <td colSpan={12} className="p-0">
                         <div className="glass-card m-4 p-6">
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                             <div>
@@ -725,83 +754,15 @@ export default function ProductsPage() {
                                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
                               />
                             </div>
-                            <div className="md:col-span-2">
-                              <div className="flex items-center justify-between">
-                                <label className="text-sm text-slate-600">Inventory records</label>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setEditInventoryItems((prev) => [
-                                      ...prev,
-                                      {
-                                        id: Date.now(),
-                                        productId: editTarget ?? Date.now(),
-                                        variant: "",
-                                        stock: 0,
-                                        location: "Main Warehouse",
-                                      },
-                                    ])
-                                  }
-                                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                                >
-                                  Add row
-                                </button>
-                              </div>
-                              <div className="mt-3 space-y-3">
-                                {editInventoryItems.map((item) => (
-                                  <div
-                                    key={item.id}
-                                    className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[1.5fr_1fr_1fr_auto]"
-                                  >
-                                    <input
-                                      placeholder="Variant"
-                                      value={item.variant}
-                                      onChange={(e) =>
-                                        setEditInventoryItems((prev) =>
-                                          prev.map((row) =>
-                                            row.id === item.id ? { ...row, variant: e.target.value } : row
-                                          )
-                                        )
-                                      }
-                                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
-                                    />
-                                    <input
-                                      type="number"
-                                      placeholder="Stock"
-                                      value={item.stock}
-                                      onChange={(e) =>
-                                        setEditInventoryItems((prev) =>
-                                          prev.map((row) =>
-                                            row.id === item.id ? { ...row, stock: safeNumber(e.target.value) } : row
-                                          )
-                                        )
-                                      }
-                                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
-                                    />
-                                    <input
-                                      placeholder="Location"
-                                      value={item.location}
-                                      onChange={(e) =>
-                                        setEditInventoryItems((prev) =>
-                                          prev.map((row) =>
-                                            row.id === item.id ? { ...row, location: e.target.value } : row
-                                          )
-                                        )
-                                      }
-                                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setEditInventoryItems((prev) => prev.filter((row) => row.id !== item.id))
-                                      }
-                                      className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
+                            <div>
+                              <label className="text-sm text-slate-600">Edit Current Stock</label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={editCurrentStock}
+                                onChange={(e) => setEditCurrentStock(e.target.value)}
+                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+                              />
                             </div>
                           </div>
                         </div>
@@ -850,7 +811,7 @@ function ProductStatChip({
 }) {
   const toneClass = {
     cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100",
-    amber: "border-amber-300/25 bg-amber-300/10 text-amber-50",
+    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
     rose: "border-rose-300/25 bg-rose-300/10 text-rose-50",
     emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
   }[tone];

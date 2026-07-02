@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getSuppliers, saveSuppliers, addSupplier, addActivity, Supplier } from "../lib/storage";
+import { getSuppliers, saveSuppliers, addSupplier, addActivity, generateId, Supplier } from "../lib/storage";
 
 type LocalSupplier = Supplier;
 
@@ -47,7 +47,7 @@ export default function SuppliersPage() {
       setEditId(null);
     } else {
       const nextSupplier: LocalSupplier = {
-        id: Date.now(),
+        id: generateId(),
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
@@ -114,12 +114,12 @@ export default function SuppliersPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
-      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(51,65,85,0.96),rgba(14,165,233,0.82))] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.2)]">
+      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(51,65,85,0.96),rgba(75,85,99,0.9))]] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.2)]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">VENDOR DIRECTORY</p>
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-300/80">VENDOR DIRECTORY</p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Suppliers Command</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200/85 sm:text-base">
               Maintain supplier contacts, vendor categories, and fast lookup details for reorders and purchasing.
             </p>
           </div>

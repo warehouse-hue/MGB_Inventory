@@ -194,6 +194,21 @@ function inferCategory(...values: Array<string | undefined>) {
 
   const categories = [
     {
+      label: "Percussion Skins",
+      keywords: [
+        "bongo skin",
+        "conga skin",
+        "timbale head",
+        "djembe",
+        "tumba",
+        "percussion skin",
+        "fiberskyn lp",
+        "lp247",
+        "lp263",
+        "lp264",
+      ],
+    },
+    {
       label: "Drum Skins",
       keywords: [
         "drum skin",
@@ -229,6 +244,25 @@ function inferCategory(...values: Array<string | undefined>) {
       ],
     },
     {
+      label: "Guitar Tube",
+      keywords: [
+        "guitar tube",
+        "12ax7",
+        "12au7",
+        "12at7",
+        "el84",
+        "el34",
+        "6l6",
+        "6550",
+        "ecc83",
+        "ecc82",
+        "ecc81",
+        "mullard",
+        "sovtek",
+        "svetlana",
+      ],
+    },
+    {
       label: "Drum Sticks",
       keywords: [
         "drum stick",
@@ -246,6 +280,54 @@ function inferCategory(...values: Array<string | undefined>) {
         "ahead",
         "nylon tip",
         "wood tip",
+      ],
+    },
+    {
+      label: "Drum Accessories",
+      keywords: [
+        "moon gel",
+        "falam slam",
+        "snare wire",
+        "snare lug",
+        "big fat snare",
+        "donut",
+        "drum accessory",
+      ],
+    },
+    {
+      label: "Batteries",
+      keywords: [
+        "battery",
+        "batteries",
+        "duracell",
+        "procell",
+        "aa",
+        "aaa",
+        "9v",
+        "cr2032",
+      ],
+    },
+    {
+      label: "Reverb Tanks",
+      keywords: [
+        "reverb tank",
+        "accutronics",
+        "4ab3c1b",
+        "8db2c1d",
+        "4eb2c1b",
+        "4eb3c1b",
+        "4bb3c1d",
+        "8eb2c1b",
+      ],
+    },
+    {
+      label: "Tape",
+      keywords: [
+        "gaff tape",
+        "electrical tape",
+        "duct tape",
+        "insulation tape",
+        "masking tape",
       ],
     },
   ] as const;
@@ -271,6 +353,77 @@ function inferCategory(...values: Array<string | undefined>) {
   return "Misc";
 }
 
+function resolveExplicitCategory(value: string | undefined) {
+  const normalized = normalizeHeader(value);
+  if (!normalized) return "";
+
+  if (/(bongo|conga|timbale|djembe|tumba|percussion\s?skin)/.test(normalized)) {
+    return "Percussion Skins";
+  }
+
+  if (/(skin|head|drumhead)/.test(normalized)) {
+    return "Drum Skins";
+  }
+
+  if (
+    normalized === "drum skins" ||
+    normalized === "drum skin" ||
+    normalized === "drum heads" ||
+    normalized === "drum head"
+  ) {
+    return "Drum Skins";
+  }
+
+  if (
+    normalized === "guitar strings" ||
+    normalized === "guitar string"
+  ) {
+    return "Guitar Strings";
+  }
+
+  if (
+    normalized === "guitar tube" ||
+    normalized === "guitar tubes" ||
+    /(12ax7|12au7|12at7|el84|el34|6l6|6550|ecc83|ecc82|ecc81|mullard|sovtek|svetlana)/.test(normalized)
+  ) {
+    return "Guitar Tube";
+  }
+
+  if (
+    normalized === "drum sticks" ||
+    normalized === "drum stick"
+  ) {
+    return "Drum Sticks";
+  }
+
+  if (
+    normalized === "drum accessories" ||
+    normalized === "drum accessory" ||
+    /(moon\s?gel|falam\s?slam|snare\s?wire|snare\s?lug|big\s?fat\s?snare|donut)/.test(normalized)
+  ) {
+    return "Drum Accessories";
+  }
+
+  if (normalized === "batteries" || normalized === "battery") {
+    return "Batteries";
+  }
+
+  if (normalized === "reverb tanks" || normalized === "reverb tank") {
+    return "Reverb Tanks";
+  }
+
+  if (normalized === "tape" || normalized === "gaff tape" || normalized === "electrical tape") {
+    return "Tape";
+  }
+
+  if (normalized === "misc") {
+    return "Misc";
+  }
+
+  // Any custom item type/category from CSV should remain Misc, not inferred by unrelated keywords.
+  return "Misc";
+}
+
 function findColumnIndex(headers: string[], aliases: string[]) {
   const normalizedAliases = aliases.map(normalizeHeader);
 
@@ -283,7 +436,7 @@ function findColumnIndex(headers: string[], aliases: string[]) {
 
   for (const alias of normalizedAliases) {
     const partialIndex = headers.findIndex(
-      (header) => header.includes(alias) || alias.includes(header)
+      (header) => Boolean(header) && header.includes(alias)
     );
     if (partialIndex >= 0) {
       return partialIndex;
@@ -312,19 +465,30 @@ function readColumn(row: string[], columnMap: ColumnMap, key: ColumnKey) {
   return index == null ? "" : row[index]?.trim() || "";
 }
 
-function buildImportPayload(fileName: string, text: string): QueuedImport | null {
+function isInstructionalText(value: string) {
+  const normalized = (value || "").toLowerCase().trim();
+  if (!normalized) return false;
+
+  return /(legend|do not edit|column|coloum|stock in|stock out|current:|minimum:|how many units|automatically updates|warehouse)/.test(
+    normalized
+  );
+}
+
+function buildImportPayload(
+  fileName: string,
+  text: string,
+  nextProductId: number,
+  nextInventoryId: number
+): QueuedImport | null {
   const rows = parseCSV(text);
   if (rows.length < 2) {
     return null;
   }
 
   const headerRow = rows[0];
+  const hasItemTypeColumn = headerRow.some((header) => normalizeHeader(header) === "item type");
   const columnMap = buildColumnMap(headerRow);
   const dataRows = rows.slice(1);
-  const existingProducts = getProducts();
-  const nextProductId = Math.max(0, ...existingProducts.map((item) => item.id)) + 1;
-  const existingInventory = getInventory();
-  const nextInventoryId = Math.max(0, ...existingInventory.map((item) => item.id)) + 1;
 
   const products: Product[] = [];
   const inventory: InventoryItem[] = [];
@@ -334,6 +498,20 @@ function buildImportPayload(fileName: string, text: string): QueuedImport | null
   let inventoryCounter = 0;
 
   for (const row of dataRows) {
+    const isBlankRow = row.every((cell) => !(cell || "").trim());
+    if (isBlankRow) {
+      continue;
+    }
+
+    const hasMappedValue = Object.values(columnMap).some((index) => {
+      if (index == null) return false;
+      return Boolean((row[index] || "").trim());
+    });
+
+    if (!hasMappedValue) {
+      continue;
+    }
+
     const itemName = readColumn(row, columnMap, "itemName");
     const size = readColumn(row, columnMap, "size");
     const current = parseNumber(readColumn(row, columnMap, "currentStock"));
@@ -343,7 +521,8 @@ function buildImportPayload(fileName: string, text: string): QueuedImport | null
     const productCode = readColumn(row, columnMap, "productCode");
     const supplier = readColumn(row, columnMap, "supplier");
     const lastBuyPrice = parseNumber(readColumn(row, columnMap, "lastBuyPrice"));
-    const rawBrandUses = readColumn(row, columnMap, "brandUses");
+    const itemType = hasItemTypeColumn ? readColumn(row, columnMap, "category") : "";
+    const rawBrandUses = readColumn(row, columnMap, "brandUses") || itemType;
     const model = readColumn(row, columnMap, "model");
     const inferredBrand = inferBrand(itemName, model, supplier, productCode);
     const normalizedBrandUses = rawBrandUses.trim().toLowerCase();
@@ -354,19 +533,43 @@ function buildImportPayload(fileName: string, text: string): QueuedImport | null
     const brandUses = fileBrand || (hasKnownBrand(candidateBrandUses)
       ? candidateBrandUses
       : inferredBrand || candidateBrandUses);
-    const category = inferCategory(
-      readColumn(row, columnMap, "category"),
-      itemName,
-      brandUses,
-      model,
-      size,
-      supplier,
-      productCode
-    );
+    const explicitCategory = readColumn(row, columnMap, "category");
+    const category =
+      resolveExplicitCategory(explicitCategory) ||
+      inferCategory(
+        explicitCategory,
+        itemName,
+        brandUses,
+        model,
+        size,
+        supplier,
+        productCode
+      );
     const location = readColumn(row, columnMap, "location") || "Main";
 
-    const resolvedName = itemName || model || brandUses || productCode;
-    const resolvedSku = productCode || itemName || model || `IMPORT-${nextProductId + productCounter}`;
+    const hasIdentityValue = [itemName, model, rawBrandUses, productCode].some((value) =>
+      Boolean((value || "").trim())
+    );
+    if (!hasIdentityValue) continue;
+
+    const resolvedName = itemName || model || rawBrandUses || productCode;
+    const resolvedSku = productCode || `IMPORT-${nextProductId + productCounter}`;
+
+    const hasCommercialSignals = [model, size, productCode, supplier].some((value) =>
+      Boolean((value || "").trim())
+    );
+    const hasNumericSignals = [current, minimum, orderQty, defaultOrderQty, lastBuyPrice].some(
+      (value) => Number(value) > 0
+    );
+    const looksInstructional =
+      isInstructionalText(rawBrandUses) ||
+      isInstructionalText(itemName) ||
+      isInstructionalText(model) ||
+      isInstructionalText(supplier);
+
+    // Skip section/header/instruction rows that don't contain actual product-level data.
+    if (!hasCommercialSignals && !hasNumericSignals) continue;
+    if (looksInstructional && !hasCommercialSignals) continue;
 
     if (!resolvedName) continue;
 
@@ -461,12 +664,30 @@ export default function ImportPage() {
     if (!files.length) return;
 
     const nextImports: QueuedImport[] = [];
+    const currentQueuedProducts = queuedImports.flatMap((entry) => entry.products);
+    const currentQueuedInventory = queuedImports.flatMap((entry) => entry.inventory);
+
+    let nextProductId =
+      Math.max(
+        0,
+        ...getProducts().map((item) => item.id),
+        ...currentQueuedProducts.map((item) => item.id)
+      ) + 1;
+
+    let nextInventoryId =
+      Math.max(
+        0,
+        ...getInventory().map((item) => item.id),
+        ...currentQueuedInventory.map((item) => item.id)
+      ) + 1;
 
     for (const file of files) {
       const text = await file.text();
-      const payload = buildImportPayload(file.name, text);
+      const payload = buildImportPayload(file.name, text, nextProductId, nextInventoryId);
       if (payload) {
         nextImports.push(payload);
+        nextProductId += payload.productCount;
+        nextInventoryId += payload.inventoryCount;
       }
     }
 

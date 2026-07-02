@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getInventory,
   saveInventory,
-  getProductById,
   getProducts,
   saveProducts,
   getOrders,
   saveOrders,
   addActivity,
+  generateId,
   InventoryItem,
   Product,
 } from "../lib/storage";
@@ -25,28 +25,40 @@ function normalizeText(value: string | undefined) {
   return (value || "").trim().toLowerCase();
 }
 
-/* Stable ID generator (prevents collisions) */
-function createId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 type StatusFilter = "ALL" | "LOW" | "OUT" | "ORDERED";
 const ITEMS_PER_PAGE = 100;
 
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activeStatusFilter, setActiveStatusFilter] = useState<StatusFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [selected, setSelected] = useState<InventoryItem | null>(null);
-  const [restockAmount, setRestockAmount] = useState(1);
-  const categoryTabs = ["All", "Drum Skins", "Guitar Strings", "Drum Sticks", "Misc"];
+  const [restockAmount, setRestockAmount] = useState("");
+  const categoryTabs = [
+    "All",
+    "Drum Skins",
+    "Percussion Skins",
+    "Guitar Strings",
+    "Guitar Accessories",
+    "Drum Sticks",
+    "Drum Accessories",
+    "Batteries",
+    "Tape",
+    "Misc",
+  ];
 
   /* LOAD DATA */
   useEffect(() => {
     setItems(getInventory());
+    setProducts(getProducts());
   }, []);
+
+  const productsById = useMemo(() => {
+    return new Map(products.map((product) => [product.id, product]));
+  }, [products]);
 
   const matchesStatusFilter = (item: InventoryItem, product: Product | undefined) => {
     const stock = safeNumber(item.stock);
@@ -67,11 +79,22 @@ export default function InventoryPage() {
     return true;
   };
 
+  const handleCategoryTabClick = (category: string) => {
+    const scrollY = window.scrollY;
+    setActiveCategory(category);
+
+    // Prevent browser scroll anchoring from causing a visible jump when row counts change.
+    requestAnimationFrame(() => {
+      window.scrollTo(0, scrollY);
+    });
+  };
+
   /* FILTER */
   const filtered = useMemo(() => {
+    const normalizedSearch = search.toLowerCase().trim();
+
     const matches = items.filter((item) => {
-      const product = getProductById(item.productId);
-      const normalizedSearch = search.toLowerCase().trim();
+      const product = productsById.get(item.productId);
       const searchFields = [
         product?.brandUses,
         product?.model,
@@ -93,8 +116,8 @@ export default function InventoryPage() {
     });
 
     return matches.sort((left, right) => {
-      const leftProduct = getProductById(left.productId);
-      const rightProduct = getProductById(right.productId);
+      const leftProduct = productsById.get(left.productId);
+      const rightProduct = productsById.get(right.productId);
 
       const byBrand = normalizeText(leftProduct?.brandUses).localeCompare(normalizeText(rightProduct?.brandUses));
       if (byBrand !== 0) return byBrand;
@@ -111,7 +134,7 @@ export default function InventoryPage() {
 
       return left.id - right.id;
     });
-  }, [items, search, activeCategory, activeStatusFilter]);
+  }, [items, productsById, search, activeCategory, activeStatusFilter]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -129,21 +152,33 @@ export default function InventoryPage() {
   }, [filtered, currentPage]);
 
   const inventoryStats = useMemo(() => {
-    const totalUnits = items.reduce((sum, item) => sum + safeNumber(item.stock), 0);
     const openOrders = getOrders().filter((order) => order.status === "OPEN");
+    const stats = items.reduce(
+      (acc, item) => {
+        const stock = safeNumber(item.stock);
+        const product = productsById.get(item.productId);
+        const threshold = Number(product?.minimum ?? 0);
+
+        acc.totalUnits += stock;
+        if (stock <= 0) {
+          acc.outOfStock += 1;
+        } else if (threshold > 0 && stock <= threshold) {
+          acc.lowStock += 1;
+        }
+
+        return acc;
+      },
+      { totalUnits: 0, lowStock: 0, outOfStock: 0 }
+    );
 
     return {
       trackedLines: items.length,
-      totalUnits,
-      lowStock: items.filter((item) => {
-        const product = getProductById(item.productId);
-        const threshold = Number(product?.minimum ?? 0);
-        return safeNumber(item.stock) > 0 && threshold > 0 && safeNumber(item.stock) <= threshold;
-      }).length,
-      outOfStock: items.filter((item) => safeNumber(item.stock) <= 0).length,
+      totalUnits: stats.totalUnits,
+      lowStock: stats.lowStock,
+      outOfStock: stats.outOfStock,
       openOrders: openOrders.length,
     };
-  }, [items]);
+  }, [items, productsById]);
 
   const getStockStatus = (item: InventoryItem, product: Product | undefined) => {
     const stock = safeNumber(item.stock);
@@ -161,8 +196,8 @@ export default function InventoryPage() {
     if (threshold > 0 && stock <= threshold) {
       return {
         label: "Low stock",
-        fillClass: "bg-amber-500",
-        badgeClass: "bg-amber-500 text-slate-950",
+        fillClass: "bg-amber-600",
+        badgeClass: "bg-amber-600 text-white",
         fill: 35,
       };
     }
@@ -176,7 +211,6 @@ export default function InventoryPage() {
   };
 
   const setOrderedFlag = (productId: number, ordered: boolean) => {
-    const products = getProducts();
     const updatedProducts = products.map((product) =>
       product.id === productId
         ? {
@@ -189,6 +223,7 @@ export default function InventoryPage() {
         : product
     );
     saveProducts(updatedProducts);
+      setProducts(updatedProducts);
     return updatedProducts.find((product) => product.id === productId);
   };
 
@@ -200,7 +235,7 @@ export default function InventoryPage() {
 
     if (product.ordered) {
       const order = {
-        id: existingOrder?.id ?? Date.now(),
+        id: existingOrder?.id ?? generateId(),
         productId: product.id,
         productName: product.model || product.brandUses || product.sku || product.name || "Product",
         variant: product.sizeGauge || "",
@@ -230,15 +265,15 @@ export default function InventoryPage() {
 
       const newStock = Math.max(0, safeNumber(item.stock) + delta);
 
-      const product = getProductById(item.productId);
+      const product = productsById.get(item.productId);
       transactionToAdd = {
-        id: createId(),
+        id: generateId(),
         productId: item.productId,
         productName: product?.name || "",
         variant: item.variant,
         type: delta > 0 ? "RESTOCK" : "REMOVE",
         quantity: Math.abs(delta),
-        date: new Date().toISOString(),
+        date: Date.now(),
       };
 
       return {
@@ -265,7 +300,11 @@ export default function InventoryPage() {
 
   /* RESTOCK */
   const restock = (id: number, amount: number) => {
-    if (!amount || amount <= 0) return;
+    if (!amount || amount <= 0) {
+      setSelected(null);
+      setRestockAmount("");
+      return;
+    }
 
     let transactionToAdd: any = null;
 
@@ -274,15 +313,15 @@ export default function InventoryPage() {
 
       const newStock = safeNumber(item.stock) + amount;
 
-      const product = getProductById(item.productId);
+      const product = productsById.get(item.productId);
       transactionToAdd = {
-        id: createId(),
+        id: generateId(),
         productId: item.productId,
         productName: product?.name || "",
         variant: item.variant,
         type: "RESTOCK",
         quantity: amount,
-        date: new Date().toISOString(),
+        date: Date.now(),
       };
 
       return {
@@ -305,10 +344,10 @@ export default function InventoryPage() {
     }
 
     setSelected(null);
-    setRestockAmount(1);
+    setRestockAmount("");
   };
 
-  const selectedProduct = selected ? getProductById(selected.productId) : null;
+  const selectedProduct = selected ? productsById.get(selected.productId) : null;
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
@@ -391,7 +430,7 @@ export default function InventoryPage() {
                 <button
                   key={category}
                   type="button"
-                  onClick={() => setActiveCategory(category)}
+                  onClick={() => handleCategoryTabClick(category)}
                   className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                     activeCategory === category
                       ? "bg-slate-950 text-white shadow-sm"
@@ -426,43 +465,45 @@ export default function InventoryPage() {
                 Click any row for stock controls
               </div>
             </div>
-            <table className="sticky-table-header min-w-full text-sm text-slate-700">
-              <thead className="bg-slate-100 text-slate-600">
-                <tr>
-                  <th className="p-3 text-left">Category</th>
-                  <th className="p-3 text-left">Brand / Uses</th>
-                  <th className="p-3 text-left">Model</th>
-                  <th className="p-3 text-left">Size / Gauge</th>
-                  <th className="p-3 text-left">Current Stock</th>
-                  <th className="p-3 text-left">Order Qty</th>
-                  <th className="p-3 text-left">Status</th>
-                  <th className="p-3 text-left">Ordered ✅</th>
-                  <th className="p-3 text-left">Ordered Date</th>
-                  <th className="p-3 text-left">Product Code</th>
-                  <th className="p-3 text-left">Supplier</th>
-                  <th className="p-3 text-left">Last Buy Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedFiltered.map((item) => {
-                  const product = getProductById(item.productId);
+            <div role="table" aria-label="Inventory table" className="min-w-[1580px] w-full text-sm text-slate-700">
+              <div
+                role="row"
+                className="grid grid-cols-[140px_200px_140px_140px_120px_220px_120px_150px_160px_150px_160px] bg-slate-100 text-slate-600"
+              >
+                <div role="columnheader" className="p-3 text-left whitespace-nowrap">Category</div>
+                <div role="columnheader" className="p-3 text-left whitespace-nowrap">Brand / Uses</div>
+                <div role="columnheader" className="p-3 text-left whitespace-nowrap">Model</div>
+                <div role="columnheader" className="p-3 text-left whitespace-nowrap">Size / Gauge</div>
+                <div role="columnheader" className="p-3 text-left whitespace-nowrap">Current Stock</div>
+                <div role="columnheader" className="p-3 text-left whitespace-nowrap">Status</div>
+                <div role="columnheader" className="p-3 text-left whitespace-nowrap">Ordered ✅</div>
+                <div role="columnheader" className="p-3 text-left whitespace-nowrap">Ordered Date</div>
+                <div role="columnheader" className="p-3 text-left whitespace-nowrap">Product Code</div>
+                <div role="columnheader" className="p-3 text-left whitespace-nowrap">Supplier</div>
+                <div role="columnheader" className="p-3 text-left whitespace-nowrap">Last Buy Price</div>
+              </div>
+
+              <div role="rowgroup" style={{ overflowAnchor: "none" }}>
+                {paginatedFiltered.map((item, rowIndex) => {
+                  const product = productsById.get(item.productId);
                   const status = getStockStatus(item, product);
+                  const rowKey = `${item.id}-${item.productId}-${item.variant || "-"}-${rowIndex}`;
 
                   return (
-                    <tr
-                      key={item.id}
+                    <div
+                      role="row"
+                      key={rowKey}
                       onClick={() => setSelected(item)}
-                      className={`cursor-pointer border-t border-slate-200 transition hover:bg-slate-50 ${selected?.id === item.id ? "bg-cyan-50/70" : ""}`}
+                      className={`grid cursor-pointer grid-cols-[140px_200px_140px_140px_120px_220px_120px_150px_160px_150px_160px] border-t border-slate-200 transition hover:bg-slate-50 ${selected?.id === item.id ? "bg-cyan-50/70" : ""}`}
                     >
-                      <td className="p-3 font-medium text-slate-950">{product?.category || "-"}</td>
-                      <td className="p-3 font-medium text-slate-950">
+                      <div role="cell" className="p-3 font-medium text-slate-950 overflow-hidden text-ellipsis whitespace-nowrap">{product?.category || "-"}</div>
+                      <div role="cell" className="p-3 font-medium text-slate-950 overflow-hidden text-ellipsis whitespace-nowrap">
                         {product?.brandUses || product?.category || product?.name || "Unknown"}
-                      </td>
-                      <td className="p-3 text-slate-600">{product?.model || product?.name || "-"}</td>
-                      <td className="p-3 text-slate-600">{product?.sizeGauge || item.variant || "-"}</td>
-                      <td className="p-3 text-slate-600">{safeNumber(item.stock)}</td>
-                      <td className="p-3 text-slate-600">{product?.orderQty ?? 0}</td>
-                      <td className="p-3 text-slate-600">
+                      </div>
+                      <div role="cell" className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">{product?.model || product?.name || "-"}</div>
+                      <div role="cell" className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">{product?.sizeGauge || item.variant || "-"}</div>
+                      <div role="cell" className="p-3 font-semibold underline decoration-2 underline-offset-2 text-slate-700 overflow-hidden text-ellipsis whitespace-nowrap">{safeNumber(item.stock)}</div>
+                      <div role="cell" className="p-3 text-slate-600 whitespace-nowrap">
                         <div className="inline-flex items-center gap-2">
                           <span className="inline-flex h-5 w-10 items-center rounded-full border border-slate-300 bg-slate-100 p-0.5">
                             <span
@@ -476,37 +517,32 @@ export default function InventoryPage() {
                             {status.label}
                           </span>
                         </div>
-                      </td>
-                      <td className="p-3 text-slate-600">
-                        <span
-                          className={`inline-flex h-6 w-6 items-center justify-center rounded border ${product?.ordered ? "border-emerald-500 bg-emerald-600 text-white" : "border-slate-300 bg-white text-slate-400"}`}
-                        >
-                          {product?.ordered ? (
-                            <svg
-                              viewBox="0 0 24 24"
-                              className="h-4 w-4"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M5 13l4 4L19 7" />
-                            </svg>
-                          ) : null}
-                        </span>
-                      </td>
-                      <td className="p-3 text-slate-600">{product?.orderedDate || "-"}</td>
-                      <td className="p-3 text-slate-600">{product?.productCode || product?.sku || "-"}</td>
-                      <td className="p-3 text-slate-600">{product?.supplier || "-"}</td>
-                      <td className="p-3 text-slate-600">
+                      </div>
+                      <div role="cell" className="p-3 text-slate-600 whitespace-nowrap">
+                        <label className="inline-flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(product?.ordered)}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(event) => {
+                              const updatedProduct = setOrderedFlag(item.productId, event.target.checked);
+                              syncOrderForProduct(updatedProduct);
+                            }}
+                            className="h-4 w-4 cursor-pointer rounded border-emerald-400 accent-emerald-600 focus:ring-emerald-500"
+                          />
+                        </label>
+                      </div>
+                      <div role="cell" className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">{product?.orderedDate || "-"}</div>
+                      <div role="cell" className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">{product?.productCode || "-"}</div>
+                      <div role="cell" className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">{product?.supplier || "-"}</div>
+                      <div role="cell" className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">
                         {product?.lastBuyPrice != null ? `$${product.lastBuyPrice.toFixed(2)}` : "-"}
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+            </div>
             <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-6 py-4">
               {Array.from({ length: totalPages }, (_, index) => {
                 const page = index + 1;
@@ -540,7 +576,7 @@ export default function InventoryPage() {
                     Inventory detail
                   </p>
                   <h2 className="mt-2 text-xl font-semibold text-white">
-                    {getProductById(selected.productId)?.model || getProductById(selected.productId)?.name}
+                    {selectedProduct?.model || selectedProduct?.name}
                   </h2>
                 </div>
                 <button
@@ -554,7 +590,7 @@ export default function InventoryPage() {
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 <div className="rounded-3xl border border-cyan-400/15 bg-white/5 p-4">
                   <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-400">Current Stock</p>
-                  <p className="mt-2 text-3xl font-semibold text-white">{safeNumber(selected.stock)}</p>
+                  <p className="mt-2 text-3xl font-semibold underline decoration-2 underline-offset-4 text-white">{safeNumber(selected.stock)}</p>
                 </div>
                 <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
                   <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-400">Ordered</p>
@@ -567,7 +603,7 @@ export default function InventoryPage() {
                         syncOrderForProduct(product);
                         setItems(getInventory());
                       }}
-                      className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                      className="h-4 w-4 cursor-pointer rounded border-emerald-400 accent-emerald-600 focus:ring-emerald-500"
                     />
                     {selectedProduct?.ordered ? "Yes" : "No"}
                   </label>
@@ -594,12 +630,14 @@ export default function InventoryPage() {
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
+                      min={1}
                       value={restockAmount}
-                      onChange={(e) => setRestockAmount(Number(e.target.value))}
+                      onChange={(e) => setRestockAmount(e.target.value)}
+                      placeholder="Qty"
                       className="w-full rounded-2xl border border-white/10 bg-white px-4 py-2 text-slate-900"
                     />
                     <button
-                      onClick={() => restock(selected.id, restockAmount)}
+                      onClick={() => restock(selected.id, Number(restockAmount))}
                       className="rounded-2xl bg-cyan-400 px-4 py-2 font-semibold text-slate-950 transition hover:bg-cyan-300"
                     >
                       Restock
@@ -639,7 +677,7 @@ function StatChip({
   const toneClass = {
     cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100",
     slate: "border-white/15 bg-white/8 text-white",
-    amber: "border-amber-300/25 bg-amber-300/10 text-amber-50",
+    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
     rose: "border-rose-300/25 bg-rose-300/10 text-rose-50",
     sky: "border-sky-300/25 bg-sky-300/10 text-sky-50",
   }[tone];

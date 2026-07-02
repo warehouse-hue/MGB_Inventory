@@ -9,7 +9,7 @@ export default function Page() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
-      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(51,65,85,0.96),rgba(71,85,105,0.86))] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.2)]">
+      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(51,65,85,0.96),rgba(75,85,99,0.9))]] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.2)]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-300/80">SYSTEM CONFIG</p>
@@ -27,7 +27,7 @@ export default function Page() {
         </div>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-4">
         <div className="glass-card p-6">
           <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Sync state</p>
           <h2 className="mt-2 text-xl font-semibold text-slate-950">Cloud configuration</h2>
@@ -53,20 +53,18 @@ export default function Page() {
             This page is now styled to match the rest of the app and is ready for real settings modules.
           </p>
         </div>
-      </div>
 
-      <div className="glass-card p-6">
-        <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Advanced tools</p>
-        <h2 className="mt-2 text-xl font-semibold text-slate-950">Hidden import access</h2>
-        <p className="mt-3 max-w-2xl text-sm text-slate-600">
-          Bulk CSV import is intentionally tucked away here. Queue one or more files, review them, then send the import manually.
-        </p>
-        <div className="mt-4">
+        <div className="glass-card p-6">
+          <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Data tools</p>
+          <h2 className="mt-2 text-xl font-semibold text-slate-950">CSV Importer</h2>
+          <p className="mt-3 text-sm text-slate-600">
+            Import product and stock rows from CSV files.
+          </p>
           <Link
             href="/import"
-            className="inline-flex rounded-2xl border border-slate-200 bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            className="mt-4 inline-flex items-center rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
           >
-            Open Import CSV
+            Open Importer
           </Link>
         </div>
       </div>
@@ -85,7 +83,7 @@ function SettingsChip({
 }) {
   const toneClass = {
     emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
-    amber: "border-amber-300/25 bg-amber-300/10 text-amber-50",
+    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
     slate: "border-white/15 bg-white/8 text-white",
     cyan: "border-cyan-300/25 bg-cyan-300/10 text-cyan-50",
   }[tone];

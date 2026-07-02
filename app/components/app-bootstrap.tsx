@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { bootstrapCloudSync, pullCloudSnapshot } from "../lib/cloud-sync";
+import { migrateLegacyIds } from "../lib/storage";
 
 type Props = {
   children: React.ReactNode;
@@ -25,6 +26,9 @@ export default function AppBootstrap({ children }: Props) {
   useEffect(() => {
     let mounted = true;
     let timer: ReturnType<typeof setInterval> | undefined;
+
+    // One-time local migration to repair duplicate IDs from legacy imports.
+    migrateLegacyIds();
 
     const pullLatest = async () => {
       try {

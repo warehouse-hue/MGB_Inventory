@@ -6,6 +6,7 @@ import {
   saveOrders,
   updateOrder,
   addActivity,
+  generateId,
   PurchaseOrder,
   getProducts,
   saveProducts,
@@ -109,7 +110,7 @@ export default function PurchaseOrdersPage() {
     status === "OPEN"
       ? "inline-flex items-center rounded-full bg-sky-100 px-3 py-1 text-sm font-semibold text-sky-700"
       : status === "DELIVERED_PENDING"
-        ? "inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700"
+        ? "inline-flex items-center rounded-full bg-amber-200 px-3 py-1 text-sm font-semibold text-amber-900"
         : "inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700";
 
   const handleMarkReceived = (orderId: number) => {
@@ -167,7 +168,7 @@ export default function PurchaseOrdersPage() {
 
     if (!adjusted) {
       updatedInventory.unshift({
-        id: Date.now(),
+        id: generateId(),
         productId: order.productId,
         variant: order.variant || "",
         stock: Number(quantityToAdd || 0),
@@ -218,14 +219,14 @@ export default function PurchaseOrdersPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
-      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(12,74,110,0.95),rgba(56,189,248,0.82))] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.22)]">
+      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(51,65,85,0.96),rgba(75,85,99,0.9))]] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.22)]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-sky-200/80">
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-300/80">
               DELIVERY BOARD
             </p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Orders Command</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-sky-50/78 sm:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200/85 sm:text-base">
               Track inbound orders, mark received deliveries, and monitor archive turnover in one place.
             </p>
           </div>
@@ -620,7 +621,7 @@ function OrderChip({
 }) {
   const toneClass = {
     sky: "border-sky-300/25 bg-sky-300/10 text-sky-50",
-    amber: "border-amber-300/25 bg-amber-300/10 text-amber-50",
+    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
     cyan: "border-cyan-300/25 bg-cyan-300/10 text-cyan-50",
     emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
     slate: "border-white/15 bg-white/8 text-white",

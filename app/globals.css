@@ -2,13 +2,13 @@
 
 :root {
   color-scheme: light;
-  --surface-0: #f6fbfc;
-  --surface-1: #edf8fa;
-  --surface-2: #e9eff3;
-  --ink-strong: #0b0f14;
+  --surface-0: #f6f8fb;
+  --surface-1: #edf2f8;
+  --surface-2: #e4ecf6;
+  --ink-strong: #0f172a;
   --ink-soft: #475569;
-  --accent: #0d7f88;
-  --accent-soft: #22c2d3;
+  --accent: #0f3f6e;
+  --accent-soft: #0ea5e9;
   color: var(--ink-strong);
   background: var(--surface-0);
 }
@@ -24,12 +24,10 @@ html {
 body {
   min-height: 100vh;
   margin: 0;
-  background:
-    radial-gradient(circle at 14% 18%, rgba(34, 194, 211, 0.2), transparent 36%),
-    radial-gradient(circle at 84% 10%, rgba(15, 23, 42, 0.1), transparent 42%),
-    linear-gradient(150deg, var(--surface-0), var(--surface-2));
+  background: linear-gradient(180deg, #f7f9fc, #edf2f7);
   color: var(--ink-strong);
   font-family: var(--font-display), "Avenir Next", "Segoe UI", sans-serif;
+  line-height: 1.45;
 }
 
 body::before {
@@ -37,10 +35,8 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background-image: linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
-  background-size: 36px 36px;
-  mask-image: radial-gradient(circle at center, black 24%, transparent 80%);
+  background: transparent;
+  mask-image: none;
   z-index: -1;
 }
 
@@ -48,7 +44,7 @@ h1,
 h2,
 h3,
 h4 {
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
 }
 
 code,
@@ -65,18 +61,19 @@ select {
 
 button {
   cursor: pointer;
+  transition: transform 140ms ease, box-shadow 180ms ease, background-color 160ms ease, border-color 160ms ease;
 }
 
 ::selection {
-  background: rgba(34, 194, 211, 0.24);
+  background: rgba(2, 132, 199, 0.24);
   color: #0f172a;
 }
 
 input,
 textarea,
 select {
-  border: 1px solid rgba(148, 163, 184, 0.45);
-  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  background: rgba(255, 255, 255, 0.96);
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -84,8 +81,8 @@ input:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  border-color: rgba(13, 127, 136, 0.72);
-  box-shadow: 0 0 0 4px rgba(34, 194, 211, 0.18);
+  border-color: rgba(14, 116, 144, 0.62);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.14);
 }
 
 table {
@@ -93,14 +90,36 @@ table {
   border-spacing: 0;
 }
 
+tbody tr {
+  background: rgba(255, 255, 255, 0.65);
+}
+
+tbody tr:nth-child(even) {
+  background: rgba(248, 250, 252, 0.7);
+}
+
 th {
-  background: rgba(248, 250, 252, 0.9);
+  background: rgba(248, 250, 252, 0.98);
   color: #334155;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 td,
 th {
   border-color: rgba(148, 163, 184, 0.3);
+}
+
+/* Slightly darker muted copy for better readability */
+.text-slate-500 {
+  color: rgb(71 85 105) !important;
+}
+
+/* Force command header hero panels to solid black */
+div[class*="rounded-[2rem]"][class*="border-slate-800"][class*="text-white"][class*="px-6"][class*="py-7"][class*="shadow-[0_28px_80px"] {
+  background-color: #1f2937 !important;
+  background-image: linear-gradient(180deg, rgba(31, 41, 55, 0.98), rgba(51, 65, 85, 0.98)) !important;
+  border-color: rgba(51, 65, 85, 0.85) !important;
 }
 
 @keyframes fade-in-up {
@@ -116,19 +135,31 @@ th {
 
 @layer utilities {
   .glass-card {
-    @apply bg-white/80 border border-slate-200/70 shadow-sm backdrop-blur-sm rounded-3xl;
+    @apply bg-white/94 border border-slate-200/85 shadow-[0_14px_38px_rgba(15,23,42,0.08)] backdrop-blur-sm rounded-3xl;
   }
 
   .sticky-table-header thead th {
     position: sticky;
     top: 0;
     z-index: 10;
-    background: rgba(248, 250, 252, 0.96);
+    background: rgba(248, 250, 252, 0.99);
     backdrop-filter: blur(10px);
-    box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.25);
+    box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.22);
   }
 
   .animate-fade-in-up {
     animation: fade-in-up 0.45s ease-out both;
+  }
+
+  .app-shell {
+    @apply rounded-[30px] border border-slate-200/90 bg-white/88 shadow-[0_30px_80px_rgba(15,23,42,0.12)] backdrop-blur-md;
+  }
+
+  .nav-link {
+    @apply block rounded-2xl border border-sky-200/20 bg-white/5 px-4 py-3 text-sm font-medium text-sky-50 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-sky-300/40 hover:bg-sky-300/15;
+  }
+
+  .nav-panel {
+    @apply rounded-3xl border border-sky-200/15 bg-white/[0.03] p-2 backdrop-blur-sm;
   }
 }

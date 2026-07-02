@@ -93,7 +93,7 @@ export default function DashboardPage() {
               MGB OPS BOARD
             </p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Dashboard Command
+              Dashboard Command View
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
               Live snapshot of shortage pressure, purchase flow, and stock risk across the warehouse.
@@ -269,7 +269,7 @@ function SignalChip({
 }) {
   const toneClass = {
     cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100",
-    amber: "border-amber-300/25 bg-amber-300/10 text-amber-50",
+    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
     sky: "border-sky-300/25 bg-sky-300/10 text-sky-50",
     emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
   }[tone];

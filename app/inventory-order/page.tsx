@@ -7,6 +7,7 @@ import {
   getOrders,
   saveOrders,
   saveProducts,
+  generateId,
   InventoryItem,
   Product,
 } from "../lib/storage";
@@ -56,7 +57,7 @@ export default function InventoryOrderPage() {
 
     if (product.ordered) {
       const order = {
-        id: existingOrder?.id ?? Date.now(),
+        id: existingOrder?.id ?? generateId(),
         productId: product.id,
         productName: product.model || product.brandUses || product.sku || product.name || "Product",
         variant: product.sizeGauge || "",
@@ -78,20 +79,26 @@ export default function InventoryOrderPage() {
   };
 
   const lowStockProducts = useMemo(() => {
+    const normalizedSearch = search.toLowerCase().trim();
+    const stockByProductId = new Map<number, number>();
+    const variantsByProductId = new Map<number, Set<string>>();
+
+    for (const item of inventory) {
+      stockByProductId.set(item.productId, (stockByProductId.get(item.productId) ?? 0) + Number(item.stock || 0));
+
+      const variant = item.variant?.trim();
+      if (variant) {
+        if (!variantsByProductId.has(item.productId)) {
+          variantsByProductId.set(item.productId, new Set<string>());
+        }
+        variantsByProductId.get(item.productId)?.add(variant);
+      }
+    }
+
     return products
       .map((product) => {
-        const productInventory = inventory.filter((item) => item.productId === product.id);
-
-        const stock = productInventory
-          .reduce((sum, item) => sum + Number(item.stock || 0), 0);
-
-        const variantSummary = Array.from(
-          new Set(
-            productInventory
-              .map((item) => item.variant?.trim())
-              .filter((variant): variant is string => Boolean(variant))
-          )
-        ).join(", ");
+        const stock = stockByProductId.get(product.id) ?? 0;
+        const variantSummary = Array.from(variantsByProductId.get(product.id) ?? []).join(", ");
 
         const threshold =
           product.minimum != null
@@ -107,13 +114,14 @@ export default function InventoryOrderPage() {
       })
       .filter((item) => item.minimum != null && item.stock < item.minimum)
       .filter((item) =>
-        item.product.name.toLowerCase().includes(search.toLowerCase()) ||
-        item.product.brandUses?.toLowerCase().includes(search.toLowerCase()) ||
-        item.product.model?.toLowerCase().includes(search.toLowerCase()) ||
-        item.product.sizeGauge?.toLowerCase().includes(search.toLowerCase()) ||
-        item.variantSummary.toLowerCase().includes(search.toLowerCase()) ||
-        item.product.productCode?.toLowerCase().includes(search.toLowerCase()) ||
-        item.product.sku?.toLowerCase().includes(search.toLowerCase())
+        !normalizedSearch ||
+        item.product.name.toLowerCase().includes(normalizedSearch) ||
+        item.product.brandUses?.toLowerCase().includes(normalizedSearch) ||
+        item.product.model?.toLowerCase().includes(normalizedSearch) ||
+        item.product.sizeGauge?.toLowerCase().includes(normalizedSearch) ||
+        item.variantSummary.toLowerCase().includes(normalizedSearch) ||
+        item.product.productCode?.toLowerCase().includes(normalizedSearch) ||
+        item.product.sku?.toLowerCase().includes(normalizedSearch)
       );
   }, [products, inventory, search]);
 
@@ -149,14 +157,14 @@ export default function InventoryOrderPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
-      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(120,53,15,0.95),rgba(217,119,6,0.86))] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.22)]">
+      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(51,65,85,0.96),rgba(75,85,99,0.9))]] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.22)]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-amber-200/80">
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-300/80">
               REORDER MONITOR
             </p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Low/Out of Stock Command</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-amber-50/80 sm:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200/85 sm:text-base">
               Live low-stock queue for products below minimum threshold, with direct ordered-state control.
             </p>
           </div>
@@ -229,11 +237,11 @@ export default function InventoryOrderPage() {
                   <td className="p-3 text-slate-600">
                     <p className="font-semibold text-slate-950">{product.brandUses || product.model || product.name}</p>
                     <p className="text-xs text-slate-500 mt-1">
-                      {product.model || "-"} • {product.sizeGauge || variantSummary || "-"} • {product.productCode || product.sku || "-"}
+                      {product.model || "-"} • {product.sizeGauge || variantSummary || "-"} • {product.productCode || "-"}
                     </p>
                   </td>
                   <td className="p-3 text-slate-600">{product.category || "Misc"}</td>
-                  <td className="p-3 text-slate-600">{stock}</td>
+                  <td className="p-3 font-semibold underline decoration-2 underline-offset-2 text-slate-700">{stock}</td>
                   <td className="p-3 text-slate-600">{minimum}</td>
                   <td className="p-3 text-slate-600">{Math.max(0, (minimum ?? 0) - stock)}</td>
                   <td className="p-3 text-slate-600">
@@ -252,7 +260,7 @@ export default function InventoryOrderPage() {
                   <td className="p-3 text-slate-600">{product.supplier || "-"}</td>
                   <td className="p-3 text-slate-600">
                     <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">Reorder needed</span>
+                      <span className="rounded-full bg-amber-200 px-3 py-1 text-amber-900">Reorder needed</span>
                       <span
                         className={`rounded-full px-3 py-1 ${
                           product.ordered
@@ -305,7 +313,7 @@ function OrderStatChip({
   tone: "amber" | "rose" | "emerald" | "slate";
 }) {
   const toneClass = {
-    amber: "border-amber-300/25 bg-amber-300/10 text-amber-50",
+    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
     rose: "border-rose-300/25 bg-rose-300/10 text-rose-50",
     emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
     slate: "border-white/15 bg-white/8 text-white",

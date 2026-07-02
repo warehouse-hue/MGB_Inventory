@@ -220,5 +220,5 @@ export function queueCloudSync() {
     void upsertRemoteSnapshot(snapshot).catch((error) => {
       console.error(error);
     });
-  }, 600);
+  }, 1200);
 }
