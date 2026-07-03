@@ -26,12 +26,17 @@ export function getMovementSummary(transactions: Transaction[]) {
 export function getStockSummary() {
   const inventory = getInventory();
   const products = getProducts();
+  const productsById = new Map(products.map((product) => [product.id, product]));
 
   const totalProducts = products.length;
   const totalUnits = inventory.reduce((sum, i) => sum + i.stock, 0);
 
-  const lowStockItems = inventory.filter((i) => i.stock > 0 && i.stock <= 5);
-  const outOfStockItems = inventory.filter((i) => i.stock === 0);
+  const lowStockItems = inventory.filter((item) => {
+    const product = productsById.get(item.productId);
+    const minimum = Number(product?.minimum ?? 0);
+    return minimum > 0 && item.stock > 0 && item.stock < minimum;
+  });
+  const outOfStockItems = inventory.filter((item) => item.stock === 0);
 
   return {
     totalProducts,

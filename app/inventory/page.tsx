@@ -65,7 +65,7 @@ export default function InventoryPage() {
     const threshold = Number(product?.minimum ?? 0);
 
     if (activeStatusFilter === "LOW") {
-      return stock > 0 && threshold > 0 && stock <= threshold;
+      return stock > 0 && threshold > 0 && stock < threshold;
     }
 
     if (activeStatusFilter === "OUT") {
@@ -162,7 +162,7 @@ export default function InventoryPage() {
         acc.totalUnits += stock;
         if (stock <= 0) {
           acc.outOfStock += 1;
-        } else if (threshold > 0 && stock <= threshold) {
+        } else if (threshold > 0 && stock < threshold) {
           acc.lowStock += 1;
         }
 
@@ -193,7 +193,7 @@ export default function InventoryPage() {
       };
     }
 
-    if (threshold > 0 && stock <= threshold) {
+    if (threshold > 0 && stock < threshold) {
       return {
         label: "Low stock",
         fillClass: "bg-amber-600",

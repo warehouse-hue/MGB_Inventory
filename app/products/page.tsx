@@ -317,7 +317,7 @@ export default function ProductsPage() {
       lowStock: products.filter((product) => {
         const stock = getProductStock(product.id);
         const threshold = Number(product.minimum ?? 0);
-        return threshold > 0 && stock > 0 && stock <= threshold;
+        return threshold > 0 && stock > 0 && stock < threshold;
       }).length,
       outOfStock: products.filter((product) => getProductStock(product.id) <= 0).length,
       ordered: products.filter((product) => product.ordered).length,
@@ -337,7 +337,7 @@ export default function ProductsPage() {
       };
     }
 
-    if (threshold > 0 && stock <= threshold) {
+    if (threshold > 0 && stock < threshold) {
       return {
         label: "Low stock",
         fillClass: "bg-amber-600",
@@ -346,7 +346,7 @@ export default function ProductsPage() {
       };
     }
 
-    if (threshold > 0 && stock <= threshold * 1.5) {
+    if (threshold > 0 && stock > threshold && stock <= threshold * 1.5) {
       return {
         label: "Reorder soon",
         fillClass: "bg-amber-600",
