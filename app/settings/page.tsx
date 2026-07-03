@@ -1,11 +1,49 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import {
+  addActivity,
+  saveActivityLog,
+  saveInventory,
+  saveOrders,
+  saveProducts,
+  saveSuppliers,
+  saveTransactions,
+} from "../lib/storage";
 
 export default function Page() {
+  const [armCount, setArmCount] = useState(0);
+  const [statusMessage, setStatusMessage] = useState("");
+
   const cloudConfigured = Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   );
+
+  const clearInventoryData = () => {
+    if (armCount < 4) {
+      setArmCount((current) => current + 1);
+      setStatusMessage("");
+      return;
+    }
+
+    const confirmation = window.prompt('Type WIPE NOW to clear all inventory data once.');
+    if (confirmation !== "WIPE NOW") {
+      setStatusMessage("Wipe cancelled.");
+      setArmCount(0);
+      return;
+    }
+
+    saveProducts([]);
+    saveInventory([]);
+    saveOrders([]);
+    saveSuppliers([]);
+    saveTransactions([]);
+    saveActivityLog([]);
+    addActivity("Manual data wipe executed from hidden settings control.");
+    setStatusMessage("All inventory data was cleared.");
+    setArmCount(0);
+  };
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
@@ -68,6 +106,20 @@ export default function Page() {
           </Link>
         </div>
       </div>
+
+      {statusMessage ? (
+        <div className="rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm text-slate-800">
+          {statusMessage}
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={clearInventoryData}
+        title="Hidden clear inventory control"
+        aria-label="Hidden clear inventory control"
+        className="fixed bottom-2 right-2 h-5 w-5 rounded-full opacity-0 focus:opacity-30 hover:opacity-20"
+      />
     </div>
   );
 }
