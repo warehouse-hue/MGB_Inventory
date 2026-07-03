@@ -457,6 +457,18 @@ function buildColumnMap(headerRow: string[]) {
     }
   });
 
+  // Avoid treating "Product Code" as item name when broad aliases like "product" match.
+  if (
+    columnMap.itemName != null &&
+    columnMap.productCode != null &&
+    columnMap.itemName === columnMap.productCode
+  ) {
+    const headerAtIndex = headers[columnMap.itemName] || "";
+    if (headerAtIndex.includes("product code") || headerAtIndex === "sku" || headerAtIndex === "code") {
+      delete columnMap.itemName;
+    }
+  }
+
   return columnMap;
 }
 
@@ -489,6 +501,8 @@ function buildImportPayload(
   const hasItemTypeColumn = headerRow.some((header) => normalizeHeader(header) === "item type");
   const columnMap = buildColumnMap(headerRow);
   const dataRows = rows.slice(1);
+  const hasUnnamedLeadingNameColumn =
+    columnMap.itemName == null && normalizeHeader(headerRow[0]) === "";
 
   const products: Product[] = [];
   const inventory: InventoryItem[] = [];
@@ -512,7 +526,8 @@ function buildImportPayload(
       continue;
     }
 
-    const itemName = readColumn(row, columnMap, "itemName");
+    const leadingNameFallback = hasUnnamedLeadingNameColumn ? (row[0]?.trim() || "") : "";
+    const itemName = readColumn(row, columnMap, "itemName") || leadingNameFallback;
     const size = readColumn(row, columnMap, "size");
     const current = parseNumber(readColumn(row, columnMap, "currentStock"));
     const minimum = parseNumber(readColumn(row, columnMap, "minimum"));
@@ -523,7 +538,8 @@ function buildImportPayload(
     const lastBuyPrice = parseNumber(readColumn(row, columnMap, "lastBuyPrice"));
     const itemType = hasItemTypeColumn ? readColumn(row, columnMap, "category") : "";
     const rawBrandUses = readColumn(row, columnMap, "brandUses") || itemType;
-    const model = readColumn(row, columnMap, "model");
+    const importedModel = readColumn(row, columnMap, "model");
+    const model = importedModel || itemName;
     const inferredBrand = inferBrand(itemName, model, supplier, productCode);
     const normalizedBrandUses = rawBrandUses.trim().toLowerCase();
     const normalizedModel = model.trim().toLowerCase();
@@ -552,7 +568,7 @@ function buildImportPayload(
     );
     if (!hasIdentityValue) continue;
 
-    const resolvedName = itemName || model || rawBrandUses || productCode;
+    const resolvedName = model || itemName || rawBrandUses || productCode;
     const resolvedSku = productCode || `IMPORT-${nextProductId + productCounter}`;
 
     const hasCommercialSignals = [model, size, productCode, supplier].some((value) =>
