@@ -13,6 +13,7 @@ import {
 } from "../lib/storage";
 
 export default function Page() {
+  const ARM_THRESHOLD = 5;
   const [armCount, setArmCount] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
 
@@ -20,10 +21,21 @@ export default function Page() {
     process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   );
 
+  const armHiddenWipe = () => {
+    const nextCount = Math.min(armCount + 1, ARM_THRESHOLD);
+    setArmCount(nextCount);
+
+    if (nextCount < ARM_THRESHOLD) {
+      setStatusMessage(`Maintenance control armed ${nextCount}/${ARM_THRESHOLD}.`);
+      return;
+    }
+
+    setStatusMessage("Maintenance control armed. Run once to wipe all inventory data.");
+  };
+
   const clearInventoryData = () => {
-    if (armCount < 4) {
-      setArmCount((current) => current + 1);
-      setStatusMessage("");
+    if (armCount < ARM_THRESHOLD) {
+      setStatusMessage("Maintenance control is not armed yet.");
       return;
     }
 
@@ -50,7 +62,12 @@ export default function Page() {
       <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(51,65,85,0.96),rgba(75,85,99,0.9))]] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.2)]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-300/80">SYSTEM CONFIG</p>
+            <p
+              onClick={armHiddenWipe}
+              className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-300/80 cursor-default select-none"
+            >
+              SYSTEM CONFIG
+            </p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Settings Command</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200/78 sm:text-base">
               Configuration surface for sync, workspace behavior, and future warehouse controls.
@@ -110,16 +127,17 @@ export default function Page() {
       {statusMessage ? (
         <div className="rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm text-slate-800">
           {statusMessage}
+          {armCount >= ARM_THRESHOLD ? (
+            <button
+              type="button"
+              onClick={clearInventoryData}
+              className="ml-3 inline-flex items-center rounded-xl border border-rose-300 bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-200"
+            >
+              Run maintenance task
+            </button>
+          ) : null}
         </div>
       ) : null}
-
-      <button
-        type="button"
-        onClick={clearInventoryData}
-        title="Hidden clear inventory control"
-        aria-label="Hidden clear inventory control"
-        className="fixed bottom-2 right-2 h-5 w-5 rounded-full opacity-0 focus:opacity-30 hover:opacity-20"
-      />
     </div>
   );
 }
