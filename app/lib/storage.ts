@@ -164,6 +164,7 @@ function safeGet<T>(key: string, fallback: T): T {
 function safeSet(key: string, value: unknown) {
   if (typeof window === "undefined") return;
   localStorage.setItem(key, JSON.stringify(value));
+  window.dispatchEvent(new Event("mgb-storage-updated"));
   queueCloudSync();
 }
 

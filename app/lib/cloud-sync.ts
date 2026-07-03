@@ -103,6 +103,8 @@ function writeLocalSnapshot(snapshot: Snapshot) {
   for (const key of STORAGE_KEYS) {
     localStorage.setItem(key, JSON.stringify(snapshot[key] || []));
   }
+
+  window.dispatchEvent(new Event("mgb-storage-updated"));
 }
 
 function hasData(snapshot: Snapshot) {

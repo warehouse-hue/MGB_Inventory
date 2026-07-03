@@ -25,9 +25,37 @@ export default function InventoryOrderPage() {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  useEffect(() => {
+  const refreshFromStorage = () => {
     setProducts(getProducts());
     setInventory(getInventory());
+  };
+
+  useEffect(() => {
+    refreshFromStorage();
+
+    const handleStorageUpdate = () => {
+      refreshFromStorage();
+    };
+
+    const handleFocus = () => {
+      refreshFromStorage();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshFromStorage();
+      }
+    };
+
+    window.addEventListener("mgb-storage-updated", handleStorageUpdate as EventListener);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("mgb-storage-updated", handleStorageUpdate as EventListener);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   const setOrderedFlag = (productId: number, ordered: boolean) => {
