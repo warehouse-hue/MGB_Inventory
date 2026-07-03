@@ -39,6 +39,7 @@ export default function ProductsPage() {
   });
   const [editTarget, setEditTarget] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({
+    category: "",
     brandUses: "",
     model: "",
     sizeGauge: "",
@@ -150,6 +151,7 @@ export default function ProductsPage() {
   const startEditProduct = (product: Product) => {
     setEditTarget(product.id);
     setEditForm({
+      category: product.category || "",
       brandUses: product.brandUses || "",
       model: product.model || "",
       sizeGauge: product.sizeGauge || "",
@@ -177,6 +179,7 @@ export default function ProductsPage() {
       product.id === editTarget
         ? {
             ...product,
+          category: editForm.category || product.category,
             brandUses: editForm.brandUses.trim(),
             model: editForm.model.trim(),
             sizeGauge: editForm.sizeGauge.trim(),
@@ -652,6 +655,22 @@ export default function ProductsPage() {
                           </div>
 
                           <div className="mt-6 grid gap-4 md:grid-cols-2">
+                            <div>
+                              <label className="text-sm text-slate-600">Category</label>
+                              <select
+                                value={editForm.category}
+                                onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+                              >
+                                {productCategories
+                                  .filter((category) => category !== "All")
+                                  .map((category) => (
+                                    <option key={category} value={category}>
+                                      {category}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
                             <div>
                               <label className="text-sm text-slate-600">Brand / Uses</label>
                               <input
