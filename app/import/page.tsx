@@ -746,7 +746,7 @@ export default function ImportPage() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
+    <div className="p-6 space-y-6 max-w-[2200px] mx-auto animate-fade-in-up">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-950">Import Inventory</h1>

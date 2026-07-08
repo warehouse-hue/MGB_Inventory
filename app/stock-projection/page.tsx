@@ -291,7 +291,7 @@ export default function StockProjectionPage() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
+    <div className="p-6 space-y-6 max-w-[2200px] mx-auto animate-fade-in-up">
       <div className="command-hero command-hero-stock-projection">
         <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-sky-200/80">FORECAST PANEL</p>
         <div className="mt-3 command-slip-icon">

@@ -274,7 +274,7 @@ export default function InventoryOrderPage() {
   }, [lowStockProducts, currentPage]);
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
+    <div className="p-6 space-y-6 max-w-[2200px] mx-auto animate-fade-in-up">
       <div className="command-hero command-hero-inventory-order">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>

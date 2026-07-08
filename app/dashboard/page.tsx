@@ -87,7 +87,7 @@ export default function DashboardPage() {
   const topOutOfStockItems = stock.outOfStockItems.slice(0, 4);
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
+    <div className="p-6 space-y-6 max-w-[2200px] mx-auto animate-fade-in-up">
 
       {/* HEADER */}
       <div className="command-hero command-hero-dashboard">

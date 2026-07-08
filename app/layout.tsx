@@ -48,7 +48,7 @@ export default function RootLayout({
 
           {/* MAIN AREA */}
           <main className="flex-1 p-4 sm:p-6 xl:px-10">
-            <div className="app-shell max-w-[1600px] mx-auto p-4 sm:p-6">
+            <div className="app-shell max-w-[2200px] mx-auto p-4 sm:p-6">
               <AppBootstrap>{children}</AppBootstrap>
             </div>
           </main>
