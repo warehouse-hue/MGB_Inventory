@@ -683,13 +683,14 @@ function SettingsChip({
 }: {
   label: string;
   value: string;
-  tone: "emerald" | "amber" | "slate" | "cyan";
+  tone: "emerald" | "amber" | "slate" | "cyan" | "rose";
 }) {
   const toneClass = {
     emerald: "border-emerald-200/70 bg-emerald-400/35 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
     amber: "border-amber-200/70 bg-amber-400/35 text-amber-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
     slate: "border-slate-200/45 bg-slate-200/20 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]",
     cyan: "border-cyan-200/70 bg-cyan-400/35 text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    rose: "border-rose-200/70 bg-rose-400/35 text-rose-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
   }[tone];
 
   return (
