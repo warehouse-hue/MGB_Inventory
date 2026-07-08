@@ -217,7 +217,7 @@ export default function InventoryPage() {
     }
 
     return {
-      label: "Healthy",
+      label: "In stock",
       fillClass: "bg-emerald-500",
       badgeClass: "bg-emerald-500 text-white",
       fill: 100,

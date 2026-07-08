@@ -28,6 +28,11 @@ function normalizeText(value: string | undefined) {
   return (value || "").trim().toLowerCase();
 }
 
+function isLowStockByMode(stock: number, threshold: number, mode: "lt" | "lte") {
+  if (threshold <= 0 || stock <= 0) return false;
+  return mode === "lte" ? stock <= threshold : stock < threshold;
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -354,23 +359,32 @@ export default function ProductsPage() {
   }, [filteredProducts, currentPage]);
 
   const productStats = useMemo(() => {
+    const settings = getAppSettings();
+
     return {
       totalItems: products.length,
       lowStock: products.filter((product) => {
         const stock = getProductStock(product.id);
         const threshold = Number(product.minimum ?? 0);
-        return threshold > 0 && stock > 0 && stock < threshold;
+        return isLowStockByMode(stock, threshold, settings.lowStockMode);
       }).length,
-      outOfStock: products.filter((product) => getProductStock(product.id) <= 0).length,
+      outOfStock: products.filter((product) => {
+        const stock = getProductStock(product.id);
+        const threshold = Number(product.minimum ?? 0);
+        return stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0);
+      }).length,
       ordered: products.filter((product) => product.ordered).length,
     };
   }, [products, stockByProductId]);
 
   const getStockStatus = (product: Product) => {
+    const settings = getAppSettings();
     const stock = getProductStock(product.id);
     const threshold = safeNumber(product.minimum ?? 0);
+    const trackedOutOfStock =
+      stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0);
 
-    if (stock <= 0) {
+    if (trackedOutOfStock) {
       return {
         label: "Out of stock",
         fillClass: "bg-rose-500",
@@ -379,21 +393,12 @@ export default function ProductsPage() {
       };
     }
 
-    if (threshold > 0 && stock < threshold) {
+    if (isLowStockByMode(stock, threshold, settings.lowStockMode)) {
       return {
         label: "Low stock",
         fillClass: "bg-amber-600",
         badgeClass: "bg-amber-600 text-white",
         fill: 35,
-      };
-    }
-
-    if (threshold > 0 && stock > threshold && stock <= threshold * 1.5) {
-      return {
-        label: "Reorder soon",
-        fillClass: "bg-amber-600",
-        badgeClass: "bg-amber-600 text-white",
-        fill: 65,
       };
     }
 
