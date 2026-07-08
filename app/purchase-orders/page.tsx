@@ -333,12 +333,12 @@ export default function PurchaseOrdersPage() {
             <tr>
               <th className="p-3 text-left">Product</th>
               <th className="p-3 text-left">Variant</th>
-              <th className="p-3 text-left">Quantity</th>
+              <th className="p-3 text-left">Order Qty</th>
               <th className="p-3 text-left">Ordered Date</th>
               <th className="p-3 text-left">Supplier</th>
               <th className="p-3 text-left">Last Buy Price</th>
               <th className="p-3 text-left">Status</th>
-              <th className="p-3 text-left">Action</th>
+              <th className="p-3 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -426,11 +426,11 @@ export default function PurchaseOrdersPage() {
             <tr>
               <th className="p-3 text-left">Product</th>
               <th className="p-3 text-left">Variant</th>
-              <th className="p-3 text-left">Quantity</th>
+              <th className="p-3 text-left">Order Qty</th>
               <th className="p-3 text-left">Ordered Date</th>
               <th className="p-3 text-left">Supplier</th>
               <th className="p-3 text-left">Status</th>
-              <th className="p-3 text-left">Action</th>
+              <th className="p-3 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>

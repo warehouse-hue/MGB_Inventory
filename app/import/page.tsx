@@ -846,10 +846,10 @@ export default function ImportPage() {
               <thead className="bg-slate-100 text-slate-600">
                 <tr>
                   <th className="p-3 text-left">File</th>
-                  <th className="p-3 text-left">Name</th>
-                  <th className="p-3 text-left">Size</th>
-                  <th className="p-3 text-left">SKU</th>
-                  <th className="p-3 text-left">Stock</th>
+                  <th className="p-3 text-left">Model</th>
+                  <th className="p-3 text-left">Size / Gauge</th>
+                  <th className="p-3 text-left">Product Code</th>
+                  <th className="p-3 text-left">Current Stock</th>
                   <th className="p-3 text-left">Supplier</th>
                 </tr>
               </thead>

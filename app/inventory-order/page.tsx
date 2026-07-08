@@ -337,19 +337,20 @@ export default function InventoryOrderPage() {
           <thead className="bg-slate-100 text-slate-600">
             <tr>
               <th className="p-3 text-left">Product</th>
-              <th className="p-3 text-left">Category</th>
-              <th className="p-3 text-left">Inventory</th>
-              <th className="p-3 text-left">Min threshold</th>
-              <th className="p-3 text-left">Reorder point</th>
-              <th className="p-3 text-left">Ordered ✅</th>
+              <th className="p-3 text-left">Size / Gauge</th>
+              <th className="p-3 text-left">Current Stock</th>
+              <th className="p-3 text-left">Minimum Stock</th>
+              <th className="p-3 text-left">Order Qty</th>
+              <th className="p-3 text-left">Ordered Date</th>
               <th className="p-3 text-left">Supplier</th>
+              <th className="p-3 text-left">Status</th>
               <th className="p-3 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
             {lowStockProducts.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-6 text-center text-slate-500">
+                <td colSpan={9} className="p-6 text-center text-slate-500">
                   No products are currently below their minimum stock threshold.
                 </td>
               </tr>
@@ -362,12 +363,27 @@ export default function InventoryOrderPage() {
                       {product.model || "-"} • {product.sizeGauge || variantSummary || "-"} • {product.productCode || "-"}
                     </p>
                   </td>
-                  <td className="p-3 text-slate-600">{product.category || "Misc"}</td>
+                  <td className="p-3 text-slate-600">{product.sizeGauge || variantSummary || "-"}</td>
                   <td className="p-3 font-semibold underline decoration-2 underline-offset-2 text-slate-700">{stock}</td>
                   <td className="p-3 text-slate-600">{minimum}</td>
-                  <td className="p-3 text-slate-600">{Math.max(0, (minimum ?? 0) - stock)}</td>
+                  <td className="p-3 text-slate-600">{Math.max(1, Number(product.orderQty ?? 0))}</td>
+                  <td className="p-3 text-slate-600">{product.orderedDate || "-"}</td>
+                  <td className="p-3 text-slate-600">{product.supplier || "-"}</td>
                   <td className="p-3 text-slate-600">
-                    <label className="inline-flex items-center">
+                    <div className="flex flex-wrap gap-2">
+                      <span
+                        className={`rounded-full px-3 py-1 ${
+                          stock <= 0
+                            ? "bg-rose-100 text-rose-700"
+                            : "bg-amber-200 text-amber-900"
+                        }`}
+                      >
+                        {stock <= 0 ? "Out of stock" : "Low stock"}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="p-3 text-slate-600">
+                    <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
                       <input
                         type="checkbox"
                         checked={Boolean(product.ordered)}
@@ -377,22 +393,8 @@ export default function InventoryOrderPage() {
                         }}
                         className="h-4 w-4 rounded border-slate-300 text-slate-900"
                       />
+                      {product.ordered ? "Ordered" : "Mark ordered"}
                     </label>
-                  </td>
-                  <td className="p-3 text-slate-600">{product.supplier || "-"}</td>
-                  <td className="p-3 text-slate-600">
-                    <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full bg-amber-200 px-3 py-1 text-amber-900">Reorder needed</span>
-                      <span
-                        className={`rounded-full px-3 py-1 ${
-                          product.ordered
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-slate-100 text-slate-700"
-                        }`}
-                      >
-                        {product.ordered ? "Ordered" : "Not ordered"}
-                      </span>
-                    </div>
                   </td>
                 </tr>
               ))

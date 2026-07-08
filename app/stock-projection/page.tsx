@@ -494,13 +494,13 @@ export default function StockProjectionPage() {
         <table className="sticky-table-header min-w-full text-sm text-slate-700">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
-              <th className="p-3 text-left">Type</th>
-              <th className="p-3 text-left">Brand</th>
+              <th className="p-3 text-left">Category</th>
+              <th className="p-3 text-left">Brand / Uses</th>
               <th className="p-3 text-left">Model</th>
-              <th className="p-3 text-left">Size</th>
+              <th className="p-3 text-left">Size / Gauge</th>
               <th className="p-3 text-left">Product Code</th>
-              <th className="p-3 text-left">Current</th>
-              <th className="p-3 text-left">Minimum</th>
+              <th className="p-3 text-left">Current Stock</th>
+              <th className="p-3 text-left">Minimum Stock</th>
               <th className="p-3 text-left">Projected Stock</th>
               <th className="p-3 text-left">Need to Order</th>
             </tr>
