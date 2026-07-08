@@ -1,7 +1,9 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { SquarePlus } from "lucide-react";
 import {
+  getAppSettings,
   getProducts,
   saveProducts,
   getInventory,
@@ -15,6 +17,7 @@ import {
 } from "../lib/storage";
 
 const ITEMS_PER_PAGE = 100;
+const LOCATION_OPTIONS = ["Artarmon stoage", "Upper Storage"] as const;
 
 function safeNumber(value: unknown) {
   const numericValue = Number(value);
@@ -36,6 +39,12 @@ export default function ProductsPage() {
     category: "",
     orderQty: "0",
     minimum: "",
+    currentStock: "0",
+    location: LOCATION_OPTIONS[0] as string,
+    ordered: false,
+    orderedDate: "",
+    supplier: "",
+    lastBuyPrice: "",
   });
   const [editTarget, setEditTarget] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({
@@ -76,6 +85,13 @@ export default function ProductsPage() {
     setProducts(getProducts());
     setInventory(getInventory());
     setHydrated(true);
+
+    const settings = getAppSettings();
+    setForm((current) => ({
+      ...current,
+      minimum: settings.defaultMinimumStock > 0 ? String(settings.defaultMinimumStock) : "",
+      location: settings.defaultLocation,
+    }));
   }, []);
 
   const stockByProductId = useMemo(() => {
@@ -106,6 +122,10 @@ export default function ProductsPage() {
       orderQty: safeNumber(form.orderQty),
       minimum: form.minimum ? safeNumber(form.minimum) : undefined,
       productCode: form.productCode.trim(),
+      ordered: form.ordered,
+      orderedDate: form.ordered ? (form.orderedDate || new Date().toISOString().slice(0, 10)) : "",
+      supplier: form.supplier.trim(),
+      lastBuyPrice: form.lastBuyPrice ? safeNumber(form.lastBuyPrice) : undefined,
     };
 
     const inventoryItems: InventoryItem[] = [
@@ -113,10 +133,26 @@ export default function ProductsPage() {
         id: generateId(),
         productId: product.id,
         variant: product.sizeGauge || "",
-        stock: 0,
-        location: "Main Warehouse",
+        stock: Math.max(0, safeNumber(form.currentStock)),
+        location: form.location.trim() || getAppSettings().defaultLocation,
       },
     ];
+
+    if (form.ordered) {
+      const nextOrder = {
+        id: generateId(),
+        productId: product.id,
+        productName: product.model || product.brandUses || product.sku || product.name || "Product",
+        variant: product.sizeGauge || "",
+        quantity: safeNumber(form.orderQty),
+        orderedDate: form.orderedDate || new Date().toISOString().slice(0, 10),
+        supplier: form.supplier.trim(),
+        lastBuyPrice: form.lastBuyPrice ? safeNumber(form.lastBuyPrice) : undefined,
+        status: "OPEN" as const,
+      };
+
+      saveOrders([nextOrder, ...getOrders()]);
+    }
 
     const updatedInventory = [...inventoryItems, ...inventory];
     saveInventory(updatedInventory);
@@ -132,7 +168,13 @@ export default function ProductsPage() {
       productCode: "",
       category: activeCategory !== "All" ? activeCategory : "",
       orderQty: "0",
-      minimum: "",
+      minimum: getAppSettings().defaultMinimumStock > 0 ? String(getAppSettings().defaultMinimumStock) : "",
+      currentStock: "0",
+      location: getAppSettings().defaultLocation,
+      ordered: false,
+      orderedDate: "",
+      supplier: "",
+      lastBuyPrice: "",
     });
   };
 
@@ -240,7 +282,7 @@ export default function ProductsPage() {
         productId: editTarget,
         variant: baseRow?.variant || currentProduct.sizeGauge || "",
         stock: currentStock,
-        location: baseRow?.location || "Main Warehouse",
+        location: baseRow?.location || getAppSettings().defaultLocation,
       },
     ];
 
@@ -365,12 +407,16 @@ export default function ProductsPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
-      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(17,94,89,0.95),rgba(8,145,178,0.86))] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.22)]">
+      <div className="command-hero command-hero-products">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">
               ITEM CREATION BAY
             </p>
+            <div className="mt-3 command-slip-icon">
+              <SquarePlus />
+              Add Inventory
+            </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Add Inventory Command</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
               Create new inventory items, assign reorder thresholds, and seed stock lines directly into the warehouse system.
@@ -396,7 +442,7 @@ export default function ProductsPage() {
               New {selectedCategoryLabel} item
             </h2>
             <p className="mt-2 text-sm text-slate-600">
-              Create the product master record first, then manage stock and ordering from the linked inventory views.
+              Create the full product record in one pass, including stock, supplier, and ordering details.
             </p>
           </div>
 
@@ -442,6 +488,73 @@ export default function ProductsPage() {
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
               />
             ) : null}
+            <input
+              type="number"
+              min={0}
+              placeholder="Current stock"
+              value={form.currentStock}
+              onChange={(e) => setForm({ ...form, currentStock: e.target.value })}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+            />
+            <select
+              value={form.location}
+              onChange={(e) => setForm({ ...form, location: e.target.value })}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+            >
+              {LOCATION_OPTIONS.map((location) => (
+                <option key={location} value={location}>
+                  {location}
+                </option>
+              ))}
+            </select>
+            <input
+              placeholder="Supplier"
+              value={form.supplier}
+              onChange={(e) => setForm({ ...form, supplier: e.target.value })}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+            />
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Last buy price"
+              value={form.lastBuyPrice}
+              onChange={(e) => setForm({ ...form, lastBuyPrice: e.target.value })}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+            />
+            <input
+              type="number"
+              min={0}
+              placeholder="Order qty"
+              value={form.orderQty}
+              onChange={(e) => setForm({ ...form, orderQty: e.target.value })}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+            />
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <label className="flex items-center gap-2 text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={form.ordered}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setForm({
+                      ...form,
+                      ordered: checked,
+                      orderedDate: checked ? (form.orderedDate || new Date().toISOString().slice(0, 10)) : "",
+                    });
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                />
+                Ordered
+              </label>
+            </div>
+            {form.ordered ? (
+              <input
+                type="date"
+                value={form.orderedDate}
+                onChange={(e) => setForm({ ...form, orderedDate: e.target.value })}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+              />
+            ) : null}
             <select
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
@@ -474,7 +587,7 @@ export default function ProductsPage() {
             Auto-seeded stock
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            Each product variant creates a matching inventory record with zero stock so you can begin restocking immediately.
+            Each product variant creates a matching inventory record with your entered stock, location, supplier, and optional order details.
           </p>
         </div>
       </div>

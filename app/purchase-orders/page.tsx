@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ClipboardList } from "lucide-react";
 import {
   getOrders,
   saveOrders,
@@ -219,12 +220,16 @@ export default function PurchaseOrdersPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
-      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(51,65,85,0.96),rgba(75,85,99,0.9))]] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.22)]">
+      <div className="command-hero command-hero-orders">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-300/80">
               DELIVERY BOARD
             </p>
+            <div className="mt-3 command-slip-icon">
+              <ClipboardList />
+              Orders
+            </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Orders Command</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200/85 sm:text-base">
               Track inbound orders, mark received deliveries, and monitor archive turnover in one place.
@@ -620,11 +625,11 @@ function OrderChip({
   tone: "sky" | "amber" | "cyan" | "emerald" | "slate";
 }) {
   const toneClass = {
-    sky: "border-sky-300/25 bg-sky-300/10 text-sky-50",
-    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
-    cyan: "border-cyan-300/25 bg-cyan-300/10 text-cyan-50",
-    emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
-    slate: "border-white/15 bg-white/8 text-white",
+    sky: "border-sky-200/70 bg-sky-400/35 text-sky-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    amber: "border-amber-200/70 bg-amber-400/35 text-amber-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    cyan: "border-cyan-200/70 bg-cyan-400/35 text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    emerald: "border-emerald-200/70 bg-emerald-400/35 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    slate: "border-slate-200/45 bg-slate-200/20 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]",
   }[tone];
 
   return (

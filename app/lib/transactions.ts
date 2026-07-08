@@ -1,3 +1,5 @@
+import { queueCloudSync } from "./cloud-sync";
+
 export type TransactionType = "RESTOCK" | "REMOVE" | "ADJUST";
 
 export type Transaction = {
@@ -28,7 +30,10 @@ export function getTransactions(): Transaction[] {
  * Save full transaction list
  */
 function saveTransactions(transactions: Transaction[]) {
+  if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
+  window.dispatchEvent(new Event("mgb-storage-updated"));
+  queueCloudSync();
 }
 
 /**
@@ -52,5 +57,8 @@ export function getRecentTransactions(limit = 50) {
  * Clear all transactions
  */
 export function clearTransactions() {
+  if (typeof window === "undefined") return;
   localStorage.removeItem(STORAGE_KEY);
+  window.dispatchEvent(new Event("mgb-storage-updated"));
+  queueCloudSync();
 }

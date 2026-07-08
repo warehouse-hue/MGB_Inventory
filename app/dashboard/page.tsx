@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getOrders } from "../lib/storage";
+import { Radar } from "lucide-react";
+import { getAppSettings, getOrders } from "../lib/storage";
 import { getStockSummary } from "../lib/reports";
 
 function safeArray<T>(value: any): T[] {
@@ -63,6 +64,8 @@ export default function DashboardPage() {
     };
   }, [mounted]);
 
+  const settings = useMemo(() => getAppSettings(), [mounted]);
+
   const radarStats = useMemo(() => {
     const low = stock.lowStockCount;
     const out = stock.outOfStockCount;
@@ -76,6 +79,7 @@ export default function DashboardPage() {
       pressureScore,
       inbound,
       inboundUnits,
+      criticalOutOfStockCount: out,
     };
   }, [openOrderSummary, stock]);
 
@@ -86,12 +90,16 @@ export default function DashboardPage() {
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
 
       {/* HEADER */}
-      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(8,47,73,0.94),rgba(14,116,144,0.88))] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.28)]">
+      <div className="command-hero command-hero-dashboard">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">
               MGB OPS BOARD
             </p>
+            <div className="mt-3 command-slip-icon">
+              <Radar />
+              Dashboard
+            </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
               Dashboard Command View
             </h1>
@@ -137,8 +145,12 @@ export default function DashboardPage() {
               />
               <Card
                 label="Out of Stock"
-                value={stock.outOfStockCount}
-                description="Inventory entries currently at zero stock."
+                value={radarStats.criticalOutOfStockCount}
+                description={
+                  settings.includeNonStockedInAlerts
+                    ? "Inventory entries currently at zero stock."
+                    : "Tracked inventory entries at zero stock (minimum threshold above zero)."
+                }
                 accentClassName="bg-rose-50 border-rose-200"
                 href="/inventory"
               />
@@ -168,7 +180,7 @@ export default function DashboardPage() {
                   </p>
                   <h2 className="mt-2 text-2xl font-semibold tracking-tight">Stock Pressure Matrix</h2>
                   <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">
-                    Technical readout of shortage severity and inbound stock coverage.
+                    Technical readout of shortage severity and inbound stock coverage based on your current alert settings.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-cyan-500/30 bg-cyan-400/10 px-4 py-3">
@@ -188,7 +200,7 @@ export default function DashboardPage() {
                 />
                 <MeterRow
                   label="Out of stock exposure"
-                  value={stock.outOfStockCount}
+                  value={radarStats.criticalOutOfStockCount}
                   max={Math.max(8, radarStats.totalAlerts || 1)}
                   tone="rose"
                 />
@@ -236,7 +248,13 @@ export default function DashboardPage() {
                 <h2 className="mt-2 text-2xl font-semibold text-slate-950">Out of Stock Now</h2>
                 <div className="mt-5 space-y-3">
                   {topOutOfStockItems.length === 0 ? (
-                    <EmptyState message="No inventory entries are fully depleted." />
+                    <EmptyState
+                      message={
+                        settings.includeNonStockedInAlerts
+                          ? "No inventory entries are fully depleted."
+                          : "No tracked inventory entries are fully depleted."
+                      }
+                    />
                   ) : (
                     topOutOfStockItems.map((item: any) => (
                       <QueueRow
@@ -268,10 +286,10 @@ function SignalChip({
   tone: "cyan" | "amber" | "sky" | "emerald";
 }) {
   const toneClass = {
-    cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100",
-    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
-    sky: "border-sky-300/25 bg-sky-300/10 text-sky-50",
-    emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
+    cyan: "border-cyan-200/70 bg-cyan-400/35 text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    amber: "border-amber-200/70 bg-amber-400/35 text-amber-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    sky: "border-sky-200/70 bg-sky-400/35 text-sky-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    emerald: "border-emerald-200/70 bg-emerald-400/35 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
   }[tone];
 
   return (

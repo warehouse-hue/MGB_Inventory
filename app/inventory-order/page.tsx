@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { TriangleAlert } from "lucide-react";
 import {
+  addActivity,
+  getAppSettings,
   getInventory,
   getProducts,
   getOrders,
@@ -17,6 +20,11 @@ const ITEMS_PER_PAGE = 100;
 function parseNumber(value: any) {
   const number = Number(value);
   return Number.isNaN(number) ? 0 : number;
+}
+
+function isLowStockByMode(stock: number, threshold: number, mode: "lt" | "lte") {
+  if (threshold <= 0 || stock <= 0) return false;
+  return mode === "lte" ? stock <= threshold : stock < threshold;
 }
 
 export default function InventoryOrderPage() {
@@ -59,6 +67,7 @@ export default function InventoryOrderPage() {
   }, []);
 
   const setOrderedFlag = (productId: number, ordered: boolean) => {
+    const targetProduct = products.find((product) => product.id === productId);
     const updatedProducts = products.map((product) =>
       product.id === productId
         ? {
@@ -73,6 +82,14 @@ export default function InventoryOrderPage() {
 
     saveProducts(updatedProducts);
     setProducts(updatedProducts);
+
+    if (targetProduct) {
+      addActivity(
+        `${ordered ? "Marked ordered" : "Cleared ordered"} for ${
+          targetProduct.model || targetProduct.brandUses || targetProduct.name
+        } in Low/Out of Stock`
+      );
+    }
 
     return updatedProducts.find((product) => product.id === productId);
   };
@@ -106,8 +123,8 @@ export default function InventoryOrderPage() {
     }
   };
 
-  const lowStockProducts = useMemo(() => {
-    const normalizedSearch = search.toLowerCase().trim();
+  const alertProducts = useMemo(() => {
+    const settings = getAppSettings();
     const stockByProductId = new Map<number, number>();
     const variantsByProductId = new Map<number, Set<string>>();
 
@@ -133,14 +150,25 @@ export default function InventoryOrderPage() {
             ? parseNumber(product.minimum)
             : parseNumber(product.orderQty ?? 0);
 
+        const belowConfiguredThreshold = isLowStockByMode(stock, threshold, settings.lowStockMode);
+        const outOfStockAlert =
+          stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0);
+
         return {
           product,
           stock,
           variantSummary,
           minimum: threshold > 0 ? threshold : undefined,
+          isAlert: belowConfiguredThreshold || outOfStockAlert,
         };
       })
-      .filter((item) => item.minimum != null && item.stock < item.minimum)
+      .filter((item) => item.isAlert)
+  }, [products, inventory]);
+
+  const lowStockProducts = useMemo(() => {
+    const normalizedSearch = search.toLowerCase().trim();
+
+    return alertProducts
       .filter((item) =>
         !normalizedSearch ||
         item.product.name.toLowerCase().includes(normalizedSearch) ||
@@ -151,7 +179,69 @@ export default function InventoryOrderPage() {
         item.product.productCode?.toLowerCase().includes(normalizedSearch) ||
         item.product.sku?.toLowerCase().includes(normalizedSearch)
       );
-  }, [products, inventory, search]);
+  }, [alertProducts, search]);
+
+  useEffect(() => {
+    const settings = getAppSettings();
+    if (!settings.autoCreateOrderSuggestion) {
+      return;
+    }
+
+    const currentOrders = getOrders();
+    const existingOrderProductIds = new Set(currentOrders.map((order) => order.productId));
+    let updatedOrders = currentOrders;
+    let hasOrderChanges = false;
+    let hasProductChanges = false;
+
+    const updatedProducts = products.map((product) => {
+      const row = alertProducts.find((item) => item.product.id === product.id);
+      if (!row) {
+        return product;
+      }
+
+      const reorderQty = Math.max(1, Math.max(0, (row.minimum ?? 0) - row.stock) || parseNumber(product.orderQty || 1));
+
+      if (!existingOrderProductIds.has(product.id)) {
+        updatedOrders = [
+          {
+            id: generateId(),
+            productId: product.id,
+            productName: product.model || product.brandUses || product.sku || product.name || "Product",
+            variant: product.sizeGauge || "",
+            quantity: reorderQty,
+            orderedDate: new Date().toISOString().slice(0, 10),
+            supplier: product.supplier || "",
+            lastBuyPrice: product.lastBuyPrice,
+            status: "OPEN" as const,
+          },
+          ...updatedOrders,
+        ];
+        existingOrderProductIds.add(product.id);
+        hasOrderChanges = true;
+      }
+
+      if (!product.ordered) {
+        hasProductChanges = true;
+        return {
+          ...product,
+          ordered: true,
+          orderedDate: product.orderedDate || new Date().toISOString().slice(0, 10),
+        };
+      }
+
+      return product;
+    });
+
+    if (hasOrderChanges) {
+      saveOrders(updatedOrders);
+      addActivity("Auto-created purchase order suggestions for low/out-of-stock items.");
+    }
+
+    if (hasProductChanges) {
+      saveProducts(updatedProducts);
+      setProducts(updatedProducts);
+    }
+  }, [alertProducts, products]);
 
   const orderStats = useMemo(() => {
     const orderedCount = lowStockProducts.filter(({ product }) => product.ordered).length;
@@ -185,12 +275,16 @@ export default function InventoryOrderPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
-      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(51,65,85,0.96),rgba(75,85,99,0.9))]] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.22)]">
+      <div className="command-hero command-hero-inventory-order">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-300/80">
               REORDER MONITOR
             </p>
+            <div className="mt-3 command-slip-icon">
+              <TriangleAlert />
+              Low/Out of Stock
+            </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Low/Out of Stock Command</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200/85 sm:text-base">
               Live low-stock queue for products below minimum threshold, with direct ordered-state control.
@@ -341,10 +435,10 @@ function OrderStatChip({
   tone: "amber" | "rose" | "emerald" | "slate";
 }) {
   const toneClass = {
-    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
-    rose: "border-rose-300/25 bg-rose-300/10 text-rose-50",
-    emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
-    slate: "border-white/15 bg-white/8 text-white",
+    amber: "border-amber-200/70 bg-amber-400/35 text-amber-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)]",
+    rose: "border-rose-200/70 bg-rose-400/35 text-rose-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    emerald: "border-emerald-200/70 bg-emerald-400/35 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    slate: "border-slate-200/45 bg-slate-200/20 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]",
   }[tone];
 
   return (

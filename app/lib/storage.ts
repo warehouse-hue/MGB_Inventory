@@ -4,6 +4,23 @@ const MAX_ACTIVITY_ITEMS = 2000;
 const MAX_TRANSACTIONS = 5000;
 const ID_SEQUENCE_KEY = "mgb-id-sequence";
 const ID_MIGRATION_V1_KEY = "mgb-id-migration-v1";
+const APP_SETTINGS_KEY = "mgb-app-settings-v1";
+
+export type AppSettings = {
+  defaultLocation: "Artarmon stoage" | "Upper Storage";
+  defaultMinimumStock: number;
+  includeNonStockedInAlerts: boolean;
+  lowStockMode: "lt" | "lte";
+  autoCreateOrderSuggestion: boolean;
+};
+
+const DEFAULT_APP_SETTINGS: AppSettings = {
+  defaultLocation: "Artarmon stoage",
+  defaultMinimumStock: 0,
+  includeNonStockedInAlerts: false,
+  lowStockMode: "lt",
+  autoCreateOrderSuggestion: false,
+};
 
 export type Product = {
   id: number;
@@ -57,6 +74,20 @@ export type Supplier = {
   email: string;
   phone: string;
   category: string;
+};
+
+export type ProjectionJob = {
+  id: string;
+  name: string;
+  status: "Quoted" | "Invoiced" | "Booked";
+  dateNeeded: string;
+};
+
+export type ProjectionDemand = {
+  id: string;
+  productId: number;
+  jobId: string;
+  requiredQty: number;
 };
 
 const PRODUCT_CATEGORIES = [
@@ -166,6 +197,45 @@ function safeSet(key: string, value: unknown) {
   localStorage.setItem(key, JSON.stringify(value));
   window.dispatchEvent(new Event("mgb-storage-updated"));
   queueCloudSync();
+}
+
+export function getAppSettings(): AppSettings {
+  const raw = safeGet<Partial<AppSettings>>(APP_SETTINGS_KEY, {});
+
+  const location = raw.defaultLocation === "Upper Storage" ? "Upper Storage" : DEFAULT_APP_SETTINGS.defaultLocation;
+  const lowStockMode = raw.lowStockMode === "lte" ? "lte" : DEFAULT_APP_SETTINGS.lowStockMode;
+  const defaultMinimumStock = Math.max(0, safeNumber(raw.defaultMinimumStock ?? DEFAULT_APP_SETTINGS.defaultMinimumStock));
+
+  return {
+    defaultLocation: location,
+    defaultMinimumStock,
+    includeNonStockedInAlerts:
+      raw.includeNonStockedInAlerts == null
+        ? DEFAULT_APP_SETTINGS.includeNonStockedInAlerts
+        : Boolean(raw.includeNonStockedInAlerts),
+    lowStockMode,
+    autoCreateOrderSuggestion:
+      raw.autoCreateOrderSuggestion == null
+        ? DEFAULT_APP_SETTINGS.autoCreateOrderSuggestion
+        : Boolean(raw.autoCreateOrderSuggestion),
+  };
+}
+
+export function saveAppSettings(settings: Partial<AppSettings>) {
+  const current = getAppSettings();
+  const next: AppSettings = {
+    ...current,
+    ...settings,
+  };
+
+  next.defaultLocation = next.defaultLocation === "Upper Storage" ? "Upper Storage" : "Artarmon stoage";
+  next.defaultMinimumStock = Math.max(0, safeNumber(next.defaultMinimumStock));
+  next.lowStockMode = next.lowStockMode === "lte" ? "lte" : "lt";
+  next.includeNonStockedInAlerts = Boolean(next.includeNonStockedInAlerts);
+  next.autoCreateOrderSuggestion = Boolean(next.autoCreateOrderSuggestion);
+
+  safeSet(APP_SETTINGS_KEY, next);
+  return next;
 }
 
 export function generateId(): number {
@@ -480,6 +550,24 @@ export function addSupplier(supplier: Supplier) {
   const updated = [supplier, ...getSuppliers()];
   saveSuppliers(updated);
   return updated;
+}
+
+/* ---------------- STOCK PROJECTION ---------------- */
+
+export function getProjectionJobs(): ProjectionJob[] {
+  return safeGet<ProjectionJob[]>("mgb-stock-projection-jobs-v2", []);
+}
+
+export function saveProjectionJobs(jobs: ProjectionJob[]) {
+  safeSet("mgb-stock-projection-jobs-v2", jobs);
+}
+
+export function getProjectionDemands(): ProjectionDemand[] {
+  return safeGet<ProjectionDemand[]>("mgb-stock-projection-demands-v2", []);
+}
+
+export function saveProjectionDemands(demands: ProjectionDemand[]) {
+  safeSet("mgb-stock-projection-demands-v2", demands);
 }
 
 /* ---------------- TRANSACTION LOGGER ---------------- */

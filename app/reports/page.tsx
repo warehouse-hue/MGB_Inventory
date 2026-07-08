@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { BarChart3 } from "lucide-react";
 import { getActivityLog, clearActivityLog, type Activity } from "../lib/storage";
 
 const ITEMS_PER_PAGE = 100;
@@ -12,7 +13,32 @@ export default function ReportsPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    setActivities(getActivityLog());
+    const refreshActivities = () => {
+      setActivities(getActivityLog());
+    };
+
+    refreshActivities();
+
+    const handleStorageUpdate = () => refreshActivities();
+    const handleFocus = () => refreshActivities();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshActivities();
+      }
+    };
+    const handleBrowserStorage = () => refreshActivities();
+
+    window.addEventListener("mgb-storage-updated", handleStorageUpdate as EventListener);
+    window.addEventListener("storage", handleBrowserStorage);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("mgb-storage-updated", handleStorageUpdate as EventListener);
+      window.removeEventListener("storage", handleBrowserStorage);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   const stats = useMemo(() => {
@@ -65,10 +91,14 @@ export default function ReportsPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
-      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(49,46,129,0.95),rgba(14,165,233,0.82))] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.22)]">
+      <div className="command-hero command-hero-reports">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-sky-200/80">ACTIVITY INTELLIGENCE</p>
+            <div className="mt-3 command-slip-icon">
+              <BarChart3 />
+              Reports
+            </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Reports Command</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-sky-50/78 sm:text-base">
               Review system activity, operational churn, and change patterns across inventory, suppliers, and orders.
@@ -208,10 +238,10 @@ function ReportChip({
   tone: "sky" | "cyan" | "emerald" | "violet";
 }) {
   const toneClass = {
-    sky: "border-sky-300/25 bg-sky-300/10 text-sky-50",
-    cyan: "border-cyan-300/25 bg-cyan-300/10 text-cyan-50",
-    emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
-    violet: "border-violet-300/25 bg-violet-300/10 text-violet-50",
+    sky: "border-sky-200/70 bg-sky-400/35 text-sky-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    cyan: "border-cyan-200/70 bg-cyan-400/35 text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    emerald: "border-emerald-200/70 bg-emerald-400/35 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    violet: "border-violet-200/70 bg-violet-400/35 text-violet-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
   }[tone];
 
   return (

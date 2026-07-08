@@ -8,6 +8,8 @@ const STORAGE_KEYS = [
   "mgb-suppliers",
   "mgb-transactions",
   "mgb-activity-log",
+  "mgb-stock-projection-jobs-v2",
+  "mgb-stock-projection-demands-v2",
 ] as const;
 
 type Snapshot = Record<(typeof STORAGE_KEYS)[number], unknown[]>;
@@ -69,6 +71,11 @@ function writeCloudUpdatedAt(value: number) {
   localStorage.setItem(getCloudUpdatedAtKey(), asString);
   // Keep legacy key in sync so existing installs migrate without odd timestamp jumps.
   localStorage.setItem(LEGACY_CLOUD_UPDATED_AT_KEY, asString);
+}
+
+export function getCloudLastSyncedAt() {
+  if (typeof window === "undefined") return 0;
+  return readCloudUpdatedAt();
 }
 
 function getHeaders() {
@@ -157,6 +164,14 @@ async function upsertRemoteSnapshot(snapshot: Snapshot) {
   }
 
   writeCloudUpdatedAt(Date.now());
+}
+
+export async function syncCloudSnapshotNow() {
+  if (typeof window === "undefined" || !hasConfig()) return false;
+
+  const snapshot = readLocalSnapshot();
+  await upsertRemoteSnapshot(snapshot);
+  return true;
 }
 
 export async function pullCloudSnapshot() {

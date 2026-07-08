@@ -1,12 +1,35 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Handshake } from "lucide-react";
 import { getSuppliers, saveSuppliers, addSupplier, addActivity, generateId, Supplier } from "../lib/storage";
 
 type LocalSupplier = Supplier;
 
 const initialSuppliers: LocalSupplier[] = [];
 const ITEMS_PER_PAGE = 100;
+const SUPPLIER_CATEGORY_OPTIONS = [
+  "Drum Skins",
+  "Percussion Skins",
+  "Guitar Strings",
+  "Guitar Accessories",
+  "Drum Sticks",
+  "Drum Accessories",
+  "Batteries",
+  "Tape",
+  "Misc",
+] as const;
+
+function parseCategoryList(value: string) {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function serializeCategoryList(categories: string[]) {
+  return categories.join(", ");
+}
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<LocalSupplier[]>(initialSuppliers);
@@ -15,7 +38,7 @@ export default function SuppliersPage() {
     name: "",
     email: "",
     phone: "",
-    category: "",
+    categories: [] as string[],
   });
   const [editId, setEditId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -38,7 +61,7 @@ export default function SuppliersPage() {
               name: form.name.trim(),
               email: form.email.trim(),
               phone: form.phone.trim(),
-              category: form.category.trim(),
+              category: serializeCategoryList(form.categories),
             }
           : supplier
       );
@@ -51,14 +74,14 @@ export default function SuppliersPage() {
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
-        category: form.category.trim(),
+        category: serializeCategoryList(form.categories),
       };
       const next = addSupplier(nextSupplier);
       setSuppliers(next);
       addActivity(`Added supplier ${nextSupplier.name}`);
     }
 
-    setForm({ name: "", email: "", phone: "", category: "" });
+    setForm({ name: "", email: "", phone: "", categories: [] });
   };
 
   const handleEditSupplier = (supplier: LocalSupplier) => {
@@ -67,7 +90,7 @@ export default function SuppliersPage() {
       name: supplier.name,
       email: supplier.email,
       phone: supplier.phone,
-      category: supplier.category,
+      categories: parseCategoryList(supplier.category),
     });
   };
 
@@ -78,8 +101,20 @@ export default function SuppliersPage() {
     addActivity(`Deleted supplier ${removed?.name ?? id}`);
     if (editId === id) {
       setEditId(null);
-      setForm({ name: "", email: "", phone: "", category: "" });
+      setForm({ name: "", email: "", phone: "", categories: [] });
     }
+  };
+
+  const toggleCategory = (category: string) => {
+    setForm((current) => {
+      const isSelected = current.categories.includes(category);
+      return {
+        ...current,
+        categories: isSelected
+          ? current.categories.filter((entry) => entry !== category)
+          : [...current.categories, category],
+      };
+    });
   };
 
   useEffect(() => {
@@ -87,7 +122,7 @@ export default function SuppliersPage() {
   }, [suppliers]);
 
   const filtered = suppliers.filter((supplier) =>
-    supplier.name.toLowerCase().includes(search.toLowerCase())
+    `${supplier.name} ${supplier.category}`.toLowerCase().includes(search.toLowerCase())
   );
 
   useEffect(() => {
@@ -114,10 +149,14 @@ export default function SuppliersPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
-      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(51,65,85,0.96),rgba(75,85,99,0.9))]] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.2)]">
+      <div className="command-hero command-hero-suppliers">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-300/80">VENDOR DIRECTORY</p>
+            <div className="mt-3 command-slip-icon">
+              <Handshake />
+              Suppliers
+            </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Suppliers Command</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200/85 sm:text-base">
               Maintain supplier contacts, vendor categories, and fast lookup details for reorders and purchasing.
@@ -177,12 +216,31 @@ export default function SuppliersPage() {
                 placeholder="Phone"
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
               />
-              <input
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                placeholder="Category"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
-              />
+              <div className="space-y-2 sm:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Categories (select multiple)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {SUPPLIER_CATEGORY_OPTIONS.map((category) => {
+                    const isSelected = form.categories.includes(category);
+
+                    return (
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => toggleCategory(category)}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                          isSelected
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        {category}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
             <button
               type="button"
@@ -196,7 +254,7 @@ export default function SuppliersPage() {
                 type="button"
                 onClick={() => {
                   setEditId(null);
-                  setForm({ name: "", email: "", phone: "", category: "" });
+                  setForm({ name: "", email: "", phone: "", categories: [] });
                 }}
                 className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-700 font-semibold transition hover:bg-slate-50"
               >
@@ -217,9 +275,19 @@ export default function SuppliersPage() {
           <div key={supplier.id} className="glass-card p-5 transition hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between gap-4">
               <h3 className="text-lg font-semibold text-slate-950">{supplier.name}</h3>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                {supplier.category}
-              </span>
+              <div className="flex flex-wrap justify-end gap-2">
+                {parseCategoryList(supplier.category).length > 0 ? (
+                  parseCategoryList(supplier.category).map((category) => (
+                    <span key={`${supplier.id}-${category}`} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                      {category}
+                    </span>
+                  ))
+                ) : (
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                    -
+                  </span>
+                )}
+              </div>
             </div>
             <p className="text-slate-600 text-sm mt-3">{supplier.email}</p>
             <p className="text-slate-600 text-sm">{supplier.phone}</p>
@@ -277,10 +345,10 @@ function SupplierChip({
   tone: "cyan" | "slate" | "emerald" | "sky";
 }) {
   const toneClass = {
-    cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100",
-    slate: "border-white/15 bg-white/8 text-white",
-    emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
-    sky: "border-sky-300/25 bg-sky-300/10 text-sky-50",
+    cyan: "border-cyan-200/70 bg-cyan-400/35 text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    slate: "border-slate-200/45 bg-slate-200/20 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]",
+    emerald: "border-emerald-200/70 bg-emerald-400/35 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    sky: "border-sky-200/70 bg-sky-400/35 text-sky-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
   }[tone];
 
   return (

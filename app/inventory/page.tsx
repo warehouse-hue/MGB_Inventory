@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Boxes } from "lucide-react";
 import {
+  getAppSettings,
   getInventory,
   saveInventory,
   getProducts,
@@ -23,6 +25,11 @@ function safeNumber(value: any) {
 
 function normalizeText(value: string | undefined) {
   return (value || "").trim().toLowerCase();
+}
+
+function isLowStockByMode(stock: number, minimum: number, mode: "lt" | "lte") {
+  if (minimum <= 0 || stock <= 0) return false;
+  return mode === "lte" ? stock <= minimum : stock < minimum;
 }
 
 type StatusFilter = "ALL" | "LOW" | "OUT" | "ORDERED";
@@ -61,15 +68,18 @@ export default function InventoryPage() {
   }, [products]);
 
   const matchesStatusFilter = (item: InventoryItem, product: Product | undefined) => {
+    const settings = getAppSettings();
     const stock = safeNumber(item.stock);
     const threshold = Number(product?.minimum ?? 0);
+    const trackedOutOfStock =
+      stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0);
 
     if (activeStatusFilter === "LOW") {
-      return stock > 0 && threshold > 0 && stock < threshold;
+      return isLowStockByMode(stock, threshold, settings.lowStockMode);
     }
 
     if (activeStatusFilter === "OUT") {
-      return stock <= 0;
+      return trackedOutOfStock;
     }
 
     if (activeStatusFilter === "ORDERED") {
@@ -152,6 +162,7 @@ export default function InventoryPage() {
   }, [filtered, currentPage]);
 
   const inventoryStats = useMemo(() => {
+    const settings = getAppSettings();
     const openOrders = getOrders().filter((order) => order.status === "OPEN");
     const stats = items.reduce(
       (acc, item) => {
@@ -160,9 +171,9 @@ export default function InventoryPage() {
         const threshold = Number(product?.minimum ?? 0);
 
         acc.totalUnits += stock;
-        if (stock <= 0) {
+        if (stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0)) {
           acc.outOfStock += 1;
-        } else if (threshold > 0 && stock < threshold) {
+        } else if (isLowStockByMode(stock, threshold, settings.lowStockMode)) {
           acc.lowStock += 1;
         }
 
@@ -181,10 +192,13 @@ export default function InventoryPage() {
   }, [items, productsById]);
 
   const getStockStatus = (item: InventoryItem, product: Product | undefined) => {
+    const settings = getAppSettings();
     const stock = safeNumber(item.stock);
     const threshold = Number(product?.minimum ?? 0);
+    const trackedOutOfStock =
+      stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0);
 
-    if (stock <= 0) {
+    if (trackedOutOfStock) {
       return {
         label: "Out of stock",
         fillClass: "bg-rose-500",
@@ -193,7 +207,7 @@ export default function InventoryPage() {
       };
     }
 
-    if (threshold > 0 && stock < threshold) {
+    if (isLowStockByMode(stock, threshold, settings.lowStockMode)) {
       return {
         label: "Low stock",
         fillClass: "bg-amber-600",
@@ -353,12 +367,16 @@ export default function InventoryPage() {
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
 
       {/* HEADER */}
-      <div className="rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,rgba(2,6,23,0.98),rgba(12,74,110,0.95),rgba(8,145,178,0.88))] px-6 py-7 text-white shadow-[0_28px_80px_rgba(8,15,24,0.24)]">
+      <div className="command-hero command-hero-inventory">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">
               STOCK CONTROL GRID
             </p>
+            <div className="mt-3 command-slip-icon">
+              <Boxes />
+              Inventory
+            </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory Command</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
               Live warehouse stock view with fast filtering, line-by-line status, and direct restock controls.

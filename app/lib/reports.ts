@@ -1,5 +1,5 @@
 import type { Transaction } from "./transactions";
-import { getInventory, getProducts } from "./storage";
+import { getAppSettings, getInventory, getProducts } from "./storage";
 
 /**
  * Movement summary (already used)
@@ -26,6 +26,7 @@ export function getMovementSummary(transactions: Transaction[]) {
 export function getStockSummary() {
   const inventory = getInventory();
   const products = getProducts();
+  const settings = getAppSettings();
   const productsById = new Map(products.map((product) => [product.id, product]));
 
   const totalProducts = products.length;
@@ -34,9 +35,21 @@ export function getStockSummary() {
   const lowStockItems = inventory.filter((item) => {
     const product = productsById.get(item.productId);
     const minimum = Number(product?.minimum ?? 0);
-    return minimum > 0 && item.stock > 0 && item.stock < minimum;
+    if (minimum <= 0 || item.stock <= 0) return false;
+
+    return settings.lowStockMode === "lte" ? item.stock <= minimum : item.stock < minimum;
   });
-  const outOfStockItems = inventory.filter((item) => item.stock === 0);
+  const outOfStockItems = inventory.filter((item) => {
+    if (item.stock !== 0) return false;
+
+    if (settings.includeNonStockedInAlerts) {
+      return true;
+    }
+
+    const product = productsById.get(item.productId);
+    const minimum = Number(product?.minimum ?? 0);
+    return minimum > 0;
+  });
 
   return {
     totalProducts,
