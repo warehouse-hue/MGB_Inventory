@@ -10,9 +10,12 @@ import {
   generateId,
   PurchaseOrder,
   getProducts,
+  getSuppliers,
+  resolveSupplierName,
   saveProducts,
   getInventory,
   saveInventory,
+  Supplier,
 } from "../lib/storage";
 
 const ITEMS_PER_PAGE = 100;
@@ -24,6 +27,7 @@ function normalizeText(value: string | undefined) {
 
 export default function PurchaseOrdersPage() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [showClearArchiveConfirm, setShowClearArchiveConfirm] = useState(false);
   const [applyStockOrderId, setApplyStockOrderId] = useState<number | null>(null);
@@ -36,6 +40,7 @@ export default function PurchaseOrdersPage() {
 
   useEffect(() => {
     setOrders(getOrders());
+    setSuppliers(getSuppliers());
   }, []);
 
   const selectedOrder = orders.find((order) => order.id === selectedOrderId) ?? null;
@@ -355,7 +360,7 @@ export default function PurchaseOrdersPage() {
                   <td className="p-3 text-slate-600">{order.variant || "-"}</td>
                   <td className="p-3 text-slate-600">{order.quantity}</td>
                   <td className="p-3 text-slate-600">{order.orderedDate}</td>
-                  <td className="p-3 text-slate-600">{order.supplier || "-"}</td>
+                  <td className="p-3 text-slate-600">{resolveSupplierName(order.supplier || "", suppliers) || "-"}</td>
                   <td className="p-3 text-slate-600">
                     {order.lastBuyPrice != null ? `$${order.lastBuyPrice.toFixed(2)}` : "-"}
                   </td>
@@ -447,7 +452,7 @@ export default function PurchaseOrdersPage() {
                   <td className="p-3 text-slate-600">{order.variant || "-"}</td>
                   <td className="p-3 text-slate-600">{order.quantity}</td>
                   <td className="p-3 text-slate-600">{order.orderedDate}</td>
-                  <td className="p-3 text-slate-600">{order.supplier || "-"}</td>
+                  <td className="p-3 text-slate-600">{resolveSupplierName(order.supplier || "", suppliers) || "-"}</td>
                   <td className="p-3 text-slate-600">
                     <span className={getStatusClasses(order.status)}>{getStatusLabel(order.status)}</span>
                   </td>

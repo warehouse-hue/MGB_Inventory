@@ -74,7 +74,38 @@ export type Supplier = {
   email: string;
   phone: string;
   category: string;
+  website?: string;
+  paymentTerms?: "PREPAYMENT" | "POSTPAYMENT";
 };
+
+function normalizeSupplierReference(value: string | undefined) {
+  return (value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/\/$/, "");
+}
+
+export function resolveSupplierName(reference: string | undefined, suppliers: Supplier[]) {
+  const normalizedReference = normalizeSupplierReference(reference);
+  if (!normalizedReference) return "";
+
+  const matched = suppliers.find((supplier) => {
+    const name = normalizeSupplierReference(supplier.name);
+    const email = normalizeSupplierReference(supplier.email);
+    const website = normalizeSupplierReference(supplier.website);
+
+    return (
+      normalizedReference === name ||
+      normalizedReference === email ||
+      normalizedReference === website
+    );
+  });
+
+  if (!matched) return reference?.trim() || "";
+  return matched.name;
+}
 
 export type ProjectionJob = {
   id: string;

@@ -71,6 +71,21 @@ Notes:
 - `NEXT_PUBLIC_SYNC_NAMESPACE` lets you separate environments (for example: `dev`, `staging`, `prod`).
 - If these env vars are missing, the app falls back to local-only storage.
 
+## Automated Overview Email
+
+The purchase orders page includes a "Send overview" action that auto-builds a stock + order summary and emails it.
+
+Set these environment variables in `.env.local`:
+
+```bash
+RESEND_API_KEY=your_resend_api_key
+OVERVIEW_EMAIL_FROM=inventory@yourdomain.com
+```
+
+Notes:
+- `RESEND_API_KEY` is required for the `app/api/overview-email` route.
+- `OVERVIEW_EMAIL_FROM` must be a sender accepted by your email provider. If omitted, `onboarding@resend.dev` is used.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

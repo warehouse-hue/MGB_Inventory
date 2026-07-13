@@ -8,11 +8,14 @@ import {
   getInventory,
   getProducts,
   getOrders,
+  getSuppliers,
+  resolveSupplierName,
   saveOrders,
   saveProducts,
   generateId,
   InventoryItem,
   Product,
+  Supplier,
 } from "../lib/storage";
 
 const ITEMS_PER_PAGE = 100;
@@ -30,12 +33,14 @@ function isLowStockByMode(stock: number, threshold: number, mode: "lt" | "lte") 
 export default function InventoryOrderPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
   const refreshFromStorage = () => {
     setProducts(getProducts());
     setInventory(getInventory());
+    setSuppliers(getSuppliers());
   };
 
   useEffect(() => {
@@ -108,7 +113,7 @@ export default function InventoryOrderPage() {
         variant: product.sizeGauge || "",
         quantity: product.orderQty ?? 0,
         orderedDate: product.orderedDate || new Date().toISOString().slice(0, 10),
-        supplier: product.supplier || "",
+        supplier: resolveSupplierName(product.supplier || "", suppliers),
         lastBuyPrice: product.lastBuyPrice,
         status: "OPEN" as const,
       };
@@ -210,7 +215,7 @@ export default function InventoryOrderPage() {
             variant: product.sizeGauge || "",
             quantity: reorderQty,
             orderedDate: new Date().toISOString().slice(0, 10),
-            supplier: product.supplier || "",
+            supplier: resolveSupplierName(product.supplier || "", suppliers),
             lastBuyPrice: product.lastBuyPrice,
             status: "OPEN" as const,
           },
@@ -368,7 +373,7 @@ export default function InventoryOrderPage() {
                   <td className="p-3 text-slate-600">{minimum}</td>
                   <td className="p-3 text-slate-600">{Math.max(1, Number(product.orderQty ?? 0))}</td>
                   <td className="p-3 text-slate-600">{product.orderedDate || "-"}</td>
-                  <td className="p-3 text-slate-600">{product.supplier || "-"}</td>
+                  <td className="p-3 text-slate-600">{resolveSupplierName(product.supplier || "", suppliers) || "-"}</td>
                   <td className="p-3 text-slate-600">
                     <div className="flex flex-wrap gap-2">
                       <span

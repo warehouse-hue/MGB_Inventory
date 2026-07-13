@@ -10,10 +10,13 @@ import {
   saveProducts,
   getOrders,
   saveOrders,
+  getSuppliers,
   addActivity,
   generateId,
+  resolveSupplierName,
   InventoryItem,
   Product,
+  Supplier,
 } from "../lib/storage";
 
 import { addTransaction } from "../lib/transactions";
@@ -38,6 +41,7 @@ const ITEMS_PER_PAGE = 100;
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activeStatusFilter, setActiveStatusFilter] = useState<StatusFilter>("ALL");
@@ -61,6 +65,7 @@ export default function InventoryPage() {
   useEffect(() => {
     setItems(getInventory());
     setProducts(getProducts());
+    setSuppliers(getSuppliers());
   }, []);
 
   const productsById = useMemo(() => {
@@ -255,7 +260,7 @@ export default function InventoryPage() {
         variant: product.sizeGauge || "",
         quantity: product.orderQty ?? 0,
         orderedDate: product.orderedDate || new Date().toISOString().slice(0, 10),
-        supplier: product.supplier || "",
+        supplier: resolveSupplierName(product.supplier || "", suppliers),
         lastBuyPrice: product.lastBuyPrice,
         status: "OPEN" as const,
       };
@@ -552,7 +557,7 @@ export default function InventoryPage() {
                       </div>
                       <div role="cell" className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">{product?.orderedDate || "-"}</div>
                       <div role="cell" className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">{product?.productCode || "-"}</div>
-                      <div role="cell" className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">{product?.supplier || "-"}</div>
+                      <div role="cell" className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">{resolveSupplierName(product?.supplier || "", suppliers) || "-"}</div>
                       <div role="cell" className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">
                         {product?.lastBuyPrice != null ? `$${product.lastBuyPrice.toFixed(2)}` : "-"}
                       </div>

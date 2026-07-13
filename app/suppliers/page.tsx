@@ -19,6 +19,7 @@ const SUPPLIER_CATEGORY_OPTIONS = [
   "Tape",
   "Misc",
 ] as const;
+const PAYMENT_TERMS_OPTIONS: Array<NonNullable<Supplier["paymentTerms"]>> = ["PREPAYMENT", "POSTPAYMENT"];
 
 function parseCategoryList(value: string) {
   return value
@@ -39,6 +40,8 @@ export default function SuppliersPage() {
     email: "",
     phone: "",
     categories: [] as string[],
+    website: "",
+    paymentTerms: "POSTPAYMENT" as NonNullable<Supplier["paymentTerms"]>,
   });
   const [editId, setEditId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -62,6 +65,8 @@ export default function SuppliersPage() {
               email: form.email.trim(),
               phone: form.phone.trim(),
               category: serializeCategoryList(form.categories),
+              website: form.website.trim(),
+              paymentTerms: form.paymentTerms,
             }
           : supplier
       );
@@ -75,13 +80,15 @@ export default function SuppliersPage() {
         email: form.email.trim(),
         phone: form.phone.trim(),
         category: serializeCategoryList(form.categories),
+        website: form.website.trim(),
+        paymentTerms: form.paymentTerms,
       };
       const next = addSupplier(nextSupplier);
       setSuppliers(next);
       addActivity(`Added supplier ${nextSupplier.name}`);
     }
 
-    setForm({ name: "", email: "", phone: "", categories: [] });
+    setForm({ name: "", email: "", phone: "", categories: [], website: "", paymentTerms: "POSTPAYMENT" });
   };
 
   const handleEditSupplier = (supplier: LocalSupplier) => {
@@ -91,6 +98,8 @@ export default function SuppliersPage() {
       email: supplier.email,
       phone: supplier.phone,
       categories: parseCategoryList(supplier.category),
+      website: supplier.website || "",
+      paymentTerms: supplier.paymentTerms || "POSTPAYMENT",
     });
   };
 
@@ -101,7 +110,7 @@ export default function SuppliersPage() {
     addActivity(`Deleted supplier ${removed?.name ?? id}`);
     if (editId === id) {
       setEditId(null);
-      setForm({ name: "", email: "", phone: "", categories: [] });
+      setForm({ name: "", email: "", phone: "", categories: [], website: "", paymentTerms: "POSTPAYMENT" });
     }
   };
 
@@ -122,7 +131,9 @@ export default function SuppliersPage() {
   }, [suppliers]);
 
   const filtered = suppliers.filter((supplier) =>
-    `${supplier.name} ${supplier.category}`.toLowerCase().includes(search.toLowerCase())
+    `${supplier.name} ${supplier.category} ${supplier.website || ""} ${supplier.email || ""} ${supplier.paymentTerms || ""}`
+      .toLowerCase()
+      .includes(search.toLowerCase())
   );
 
   useEffect(() => {
@@ -216,6 +227,28 @@ export default function SuppliersPage() {
                 placeholder="Phone"
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
               />
+              <input
+                value={form.website}
+                onChange={(e) => setForm({ ...form, website: e.target.value })}
+                placeholder="Website (https://... )"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
+              />
+              <select
+                value={form.paymentTerms}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    paymentTerms: (e.target.value as NonNullable<Supplier["paymentTerms"]>) || "POSTPAYMENT",
+                  })
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
+              >
+                {PAYMENT_TERMS_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option === "PREPAYMENT" ? "Pre-payment" : "Post-payment"}
+                  </option>
+                ))}
+              </select>
               <div className="space-y-2 sm:col-span-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                   Categories (select multiple)
@@ -254,7 +287,7 @@ export default function SuppliersPage() {
                 type="button"
                 onClick={() => {
                   setEditId(null);
-                  setForm({ name: "", email: "", phone: "", categories: [] });
+                  setForm({ name: "", email: "", phone: "", categories: [], website: "", paymentTerms: "POSTPAYMENT" });
                 }}
                 className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-slate-700 font-semibold transition hover:bg-slate-50"
               >
@@ -291,6 +324,24 @@ export default function SuppliersPage() {
             </div>
             <p className="text-slate-600 text-sm mt-3">{supplier.email}</p>
             <p className="text-slate-600 text-sm">{supplier.phone}</p>
+            <p className="text-slate-600 text-sm">
+              Website:{" "}
+              {supplier.website ? (
+                <a
+                  href={supplier.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sky-700 underline hover:text-sky-900"
+                >
+                  {supplier.website}
+                </a>
+              ) : (
+                "-"
+              )}
+            </p>
+            <p className="text-slate-600 text-sm">
+              Payment terms: {supplier.paymentTerms === "PREPAYMENT" ? "Pre-payment" : "Post-payment"}
+            </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"

@@ -10,10 +10,13 @@ import {
   saveInventory,
   getOrders,
   saveOrders,
+  getSuppliers,
   addActivity,
   generateId,
+  resolveSupplierName,
   Product,
   InventoryItem,
+  Supplier,
 } from "../lib/storage";
 
 const ITEMS_PER_PAGE = 100;
@@ -36,6 +39,7 @@ function isLowStockByMode(stock: number, threshold: number, mode: "lt" | "lte") 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [form, setForm] = useState({
     brandUses: "",
     model: "",
@@ -89,6 +93,7 @@ export default function ProductsPage() {
   useEffect(() => {
     setProducts(getProducts());
     setInventory(getInventory());
+    setSuppliers(getSuppliers());
     setHydrated(true);
 
     const settings = getAppSettings();
@@ -98,6 +103,11 @@ export default function ProductsPage() {
       location: settings.defaultLocation,
     }));
   }, []);
+
+  const supplierNames = useMemo(
+    () => Array.from(new Set(suppliers.map((supplier) => supplier.name).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [suppliers]
+  );
 
   const stockByProductId = useMemo(() => {
     const map = new Map<number, number>();
@@ -129,7 +139,7 @@ export default function ProductsPage() {
       productCode: form.productCode.trim(),
       ordered: form.ordered,
       orderedDate: form.ordered ? (form.orderedDate || new Date().toISOString().slice(0, 10)) : "",
-      supplier: form.supplier.trim(),
+      supplier: resolveSupplierName(form.supplier.trim(), suppliers),
       lastBuyPrice: form.lastBuyPrice ? safeNumber(form.lastBuyPrice) : undefined,
     };
 
@@ -151,7 +161,7 @@ export default function ProductsPage() {
         variant: product.sizeGauge || "",
         quantity: safeNumber(form.orderQty),
         orderedDate: form.orderedDate || new Date().toISOString().slice(0, 10),
-        supplier: form.supplier.trim(),
+        supplier: resolveSupplierName(form.supplier.trim(), suppliers),
         lastBuyPrice: form.lastBuyPrice ? safeNumber(form.lastBuyPrice) : undefined,
         status: "OPEN" as const,
       };
@@ -207,7 +217,7 @@ export default function ProductsPage() {
       minimum: product.minimum != null ? String(product.minimum) : "",
       ordered: Boolean(product.ordered),
       orderedDate: product.orderedDate || "",
-      supplier: product.supplier || "",
+      supplier: resolveSupplierName(product.supplier || "", suppliers),
       lastBuyPrice: product.lastBuyPrice != null ? String(product.lastBuyPrice) : "",
     });
     const currentStock = inventory
@@ -235,7 +245,7 @@ export default function ProductsPage() {
             minimum: editForm.minimum ? safeNumber(editForm.minimum) : undefined,
             ordered: editForm.ordered,
             orderedDate: editForm.orderedDate,
-            supplier: editForm.supplier.trim(),
+            supplier: resolveSupplierName(editForm.supplier.trim(), suppliers),
             lastBuyPrice: editForm.lastBuyPrice
               ? safeNumber(editForm.lastBuyPrice)
               : undefined,
@@ -260,7 +270,7 @@ export default function ProductsPage() {
         variant: currentProduct.sizeGauge || "",
         quantity: safeNumber(editForm.orderQty),
         orderedDate: editForm.orderedDate || new Date().toISOString().slice(0, 10),
-        supplier: editForm.supplier.trim(),
+        supplier: resolveSupplierName(editForm.supplier.trim(), suppliers),
         lastBuyPrice: editForm.lastBuyPrice ? safeNumber(editForm.lastBuyPrice) : undefined,
         status: "OPEN" as const,
       };
@@ -512,12 +522,18 @@ export default function ProductsPage() {
                 </option>
               ))}
             </select>
-            <input
-              placeholder="Supplier"
+            <select
               value={form.supplier}
               onChange={(e) => setForm({ ...form, supplier: e.target.value })}
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            />
+            >
+              <option value="">Select supplier</option>
+              {supplierNames.map((supplierName) => (
+                <option key={supplierName} value={supplierName}>
+                  {supplierName}
+                </option>
+              ))}
+            </select>
             <input
               type="number"
               step="0.01"
@@ -701,7 +717,7 @@ export default function ProductsPage() {
                     </td>
                     <td className="p-3 text-slate-600">{product.orderedDate || "-"}</td>
                     <td className="p-3 text-slate-600">{product.productCode || "-"}</td>
-                    <td className="p-3 text-slate-600">{product.supplier || "-"}</td>
+                    <td className="p-3 text-slate-600">{resolveSupplierName(product.supplier || "", suppliers) || "-"}</td>
                     <td className="p-3 text-slate-600">{product.lastBuyPrice != null ? `$${product.lastBuyPrice.toFixed(2)}` : "-"}</td>
                     <td className="p-3">
                       <div className="flex flex-wrap gap-2">
@@ -874,12 +890,18 @@ export default function ProductsPage() {
                             </div>
                             <div>
                               <label className="text-sm text-slate-600">Supplier</label>
-                              <input
-                                type="text"
+                              <select
                                 value={editForm.supplier}
                                 onChange={(e) => setEditForm({ ...editForm, supplier: e.target.value })}
                                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              />
+                              >
+                                <option value="">Select supplier</option>
+                                {supplierNames.map((supplierName) => (
+                                  <option key={supplierName} value={supplierName}>
+                                    {supplierName}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
                             <div>
                               <label className="text-sm text-slate-600">Last Buy Price</label>

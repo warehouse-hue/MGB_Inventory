@@ -6,8 +6,11 @@ import {
   addActivity,
   getInventory,
   getProducts,
+  getSuppliers,
   InventoryItem,
   Product,
+  Supplier,
+  resolveSupplierName,
   saveInventory,
   saveProducts,
 } from "../lib/storage";
@@ -490,7 +493,8 @@ function buildImportPayload(
   fileName: string,
   text: string,
   nextProductId: number,
-  nextInventoryId: number
+  nextInventoryId: number,
+  suppliers: Supplier[]
 ): QueuedImport | null {
   const rows = parseCSV(text);
   if (rows.length < 2) {
@@ -534,7 +538,8 @@ function buildImportPayload(
     const orderQty = parseNumber(readColumn(row, columnMap, "orderQty"));
     const defaultOrderQty = parseNumber(readColumn(row, columnMap, "defaultOrderQty"));
     const productCode = readColumn(row, columnMap, "productCode");
-    const supplier = readColumn(row, columnMap, "supplier");
+    const supplierReference = readColumn(row, columnMap, "supplier");
+    const supplier = resolveSupplierName(supplierReference, suppliers);
     const lastBuyPrice = parseNumber(readColumn(row, columnMap, "lastBuyPrice"));
     const itemType = hasItemTypeColumn ? readColumn(row, columnMap, "category") : "";
     const rawBrandUses = readColumn(row, columnMap, "brandUses") || itemType;
@@ -696,10 +701,11 @@ export default function ImportPage() {
         ...getInventory().map((item) => item.id),
         ...currentQueuedInventory.map((item) => item.id)
       ) + 1;
+    const suppliers = getSuppliers();
 
     for (const file of files) {
       const text = await file.text();
-      const payload = buildImportPayload(file.name, text, nextProductId, nextInventoryId);
+      const payload = buildImportPayload(file.name, text, nextProductId, nextInventoryId, suppliers);
       if (payload) {
         nextImports.push(payload);
         nextProductId += payload.productCount;
