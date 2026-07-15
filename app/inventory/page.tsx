@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Boxes } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, Boxes } from "lucide-react";
 import {
   getAppSettings,
   getInventory,
@@ -19,7 +19,13 @@ import {
   Supplier,
 } from "../lib/storage";
 
-import { addTransaction } from "../lib/transactions";
+import {
+  addTransaction,
+  getTransactions,
+  removeTransaction,
+  Transaction,
+  updateTransaction,
+} from "../lib/transactions";
 
 function safeNumber(value: any) {
   const n = Number(value);
@@ -36,18 +42,29 @@ function isLowStockByMode(stock: number, minimum: number, mode: "lt" | "lte") {
 }
 
 type StatusFilter = "ALL" | "LOW" | "OUT" | "ORDERED";
+type MovementTab = "RESTOCK" | "REMOVE";
 const ITEMS_PER_PAGE = 100;
 
 export default function InventoryPage() {
+  const todayIso = new Date().toISOString().slice(0, 10);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activeStatusFilter, setActiveStatusFilter] = useState<StatusFilter>("ALL");
+  const [activeMovementTab, setActiveMovementTab] = useState<MovementTab>("RESTOCK");
   const [currentPage, setCurrentPage] = useState(1);
   const [selected, setSelected] = useState<InventoryItem | null>(null);
   const [restockAmount, setRestockAmount] = useState("");
+  const [movementError, setMovementError] = useState("");
+  const [editingMovementId, setEditingMovementId] = useState<number | null>(null);
+  const [movementForm, setMovementForm] = useState({
+    inventoryItemId: "",
+    quantity: "",
+    date: todayIso,
+  });
   const categoryTabs = [
     "All",
     "Drum Skins",
@@ -66,11 +83,16 @@ export default function InventoryPage() {
     setItems(getInventory());
     setProducts(getProducts());
     setSuppliers(getSuppliers());
+    setTransactions(getTransactions());
   }, []);
 
   const productsById = useMemo(() => {
     return new Map(products.map((product) => [product.id, product]));
   }, [products]);
+
+  const itemsById = useMemo(() => {
+    return new Map(items.map((item) => [item.id, item]));
+  }, [items]);
 
   const matchesStatusFilter = (item: InventoryItem, product: Product | undefined) => {
     const settings = getAppSettings();
@@ -92,6 +114,231 @@ export default function InventoryPage() {
     }
 
     return true;
+  };
+
+  const movementItemOptions = useMemo(() => {
+    return items
+      .map((item) => {
+        const product = productsById.get(item.productId);
+        const label = `${product?.brandUses || "-"} | ${product?.model || product?.name || "-"} | ${
+          product?.sizeGauge || item.variant || "-"
+        } | Stock ${safeNumber(item.stock)}`;
+        return {
+          item,
+          label,
+        };
+      })
+      .sort((left, right) => left.label.localeCompare(right.label));
+  }, [items, productsById]);
+
+  const filteredMovementTransactions = useMemo(() => {
+    return transactions
+      .filter((transaction) => transaction.type === activeMovementTab)
+      .sort((left, right) => right.date - left.date)
+      .slice(0, 30);
+  }, [transactions, activeMovementTab]);
+
+  const parseMovementDate = (dateValue: string) => {
+    if (!dateValue) return Date.now();
+    const parsed = new Date(`${dateValue}T12:00:00`);
+    const ms = parsed.getTime();
+    return Number.isNaN(ms) ? Date.now() : ms;
+  };
+
+  const applyInventoryDelta = (inventoryItemId: number, delta: number) => {
+    const target = itemsById.get(inventoryItemId);
+    if (!target) {
+      return { ok: false, message: "Inventory line not found." };
+    }
+
+    const previousStock = safeNumber(target.stock);
+    const nextStock = previousStock + delta;
+    if (nextStock < 0) {
+      return { ok: false, message: "Not enough stock for that stock-out movement." };
+    }
+
+    const updatedInventory = items.map((item) =>
+      item.id === inventoryItemId
+        ? {
+            ...item,
+            stock: nextStock,
+          }
+        : item
+    );
+
+    saveInventory(updatedInventory);
+    setItems(updatedInventory);
+    setSelected((prev) =>
+      prev && prev.id === inventoryItemId
+        ? updatedInventory.find((item) => item.id === inventoryItemId) ?? prev
+        : prev
+    );
+
+    return {
+      ok: true,
+      previousStock,
+      nextStock,
+      target,
+    };
+  };
+
+  const resolveInventoryItemIdForTransaction = (transaction: Transaction) => {
+    if (transaction.inventoryItemId && itemsById.has(transaction.inventoryItemId)) {
+      return transaction.inventoryItemId;
+    }
+
+    const variant = normalizeText(transaction.variant);
+    const matched = items.find((item) => {
+      if (item.productId !== transaction.productId) return false;
+      if (!variant) return true;
+      return normalizeText(item.variant) === variant;
+    });
+
+    return matched?.id || 0;
+  };
+
+  const createMovement = () => {
+    setMovementError("");
+    const inventoryItemId = Number(movementForm.inventoryItemId);
+    const quantity = safeNumber(movementForm.quantity);
+
+    if (!inventoryItemId || quantity <= 0) {
+      setMovementError("Select an item and enter a quantity greater than 0.");
+      return;
+    }
+
+    const signedDelta = activeMovementTab === "RESTOCK" ? quantity : -quantity;
+    const applied = applyInventoryDelta(inventoryItemId, signedDelta);
+
+    if (!applied.ok || !applied.target) {
+      setMovementError(applied.message || "Could not apply stock movement.");
+      return;
+    }
+
+    const product = productsById.get(applied.target.productId);
+    const transaction: Transaction = {
+      id: generateId(),
+      type: activeMovementTab,
+      productId: applied.target.productId,
+      inventoryItemId: applied.target.id,
+      productName: product?.name || product?.model || "",
+      variant: applied.target.variant,
+      quantity,
+      previousStock: applied.previousStock,
+      newStock: applied.nextStock,
+      date: parseMovementDate(movementForm.date),
+    };
+
+    addTransaction(transaction);
+    setTransactions(getTransactions());
+    addActivity(
+      `${activeMovementTab === "RESTOCK" ? "Stock-in" : "Stock-out"} logged for ${
+        product?.model || product?.name || "inventory item"
+      } (Qty ${quantity})`
+    );
+
+    setMovementForm((current) => ({ ...current, quantity: "" }));
+  };
+
+  const startEditMovement = (transaction: Transaction) => {
+    const resolvedItemId = resolveInventoryItemIdForTransaction(transaction);
+    setMovementError("");
+    setEditingMovementId(transaction.id);
+    setMovementForm({
+      inventoryItemId: resolvedItemId ? String(resolvedItemId) : "",
+      quantity: String(transaction.quantity),
+      date: new Date(transaction.date).toISOString().slice(0, 10),
+    });
+  };
+
+  const cancelEditMovement = () => {
+    setEditingMovementId(null);
+    setMovementError("");
+    setMovementForm({
+      inventoryItemId: "",
+      quantity: "",
+      date: todayIso,
+    });
+  };
+
+  const saveEditedMovement = () => {
+    setMovementError("");
+    const current = transactions.find((transaction) => transaction.id === editingMovementId);
+    if (!current) {
+      setMovementError("Movement record not found.");
+      return;
+    }
+
+    const fallbackItemId = resolveInventoryItemIdForTransaction(current);
+    const inventoryItemId = Number(movementForm.inventoryItemId || fallbackItemId || 0);
+    const quantity = safeNumber(movementForm.quantity);
+    if (!inventoryItemId || quantity <= 0) {
+      setMovementError("Select an item and enter a quantity greater than 0.");
+      return;
+    }
+
+    const oldSignedQty = current.type === "RESTOCK" ? current.quantity : -current.quantity;
+    const newSignedQty = current.type === "RESTOCK" ? quantity : -quantity;
+    const delta = newSignedQty - oldSignedQty;
+
+    const applied = applyInventoryDelta(inventoryItemId, delta);
+    if (!applied.ok || !applied.target) {
+      setMovementError(applied.message || "Could not update stock movement.");
+      return;
+    }
+
+    const product = productsById.get(applied.target.productId);
+    const updatedTransaction: Transaction = {
+      ...current,
+      productId: applied.target.productId,
+      inventoryItemId: applied.target.id,
+      productName: product?.name || product?.model || "",
+      variant: applied.target.variant,
+      quantity,
+      previousStock: applied.previousStock,
+      newStock: applied.nextStock,
+      date: parseMovementDate(movementForm.date),
+    };
+
+    updateTransaction(updatedTransaction);
+    setTransactions(getTransactions());
+    addActivity(
+      `Updated ${current.type === "RESTOCK" ? "stock-in" : "stock-out"} for ${
+        product?.model || product?.name || "inventory item"
+      } (Qty ${quantity})`
+    );
+
+    cancelEditMovement();
+  };
+
+  const deleteMovementEntry = (transaction: Transaction) => {
+    setMovementError("");
+    const inventoryItemId = resolveInventoryItemIdForTransaction(transaction);
+    if (!inventoryItemId) {
+      setMovementError("This entry cannot be safely reversed because no stock line is linked.");
+      return;
+    }
+
+    const reverseDelta = transaction.type === "RESTOCK" ? -transaction.quantity : transaction.quantity;
+    const applied = applyInventoryDelta(inventoryItemId, reverseDelta);
+    if (!applied.ok || !applied.target) {
+      setMovementError(applied.message || "Could not delete movement entry.");
+      return;
+    }
+
+    removeTransaction(transaction.id);
+    setTransactions(getTransactions());
+
+    const product = productsById.get(applied.target.productId);
+    addActivity(
+      `Deleted ${transaction.type === "RESTOCK" ? "stock-in" : "stock-out"} entry for ${
+        product?.model || product?.name || "inventory item"
+      }`
+    );
+
+    if (editingMovementId === transaction.id) {
+      cancelEditMovement();
+    }
   };
 
   const handleCategoryTabClick = (category: string) => {
@@ -277,21 +524,25 @@ export default function InventoryPage() {
 
   /* UPDATE STOCK */
   const updateStock = (id: number, delta: number) => {
-    let transactionToAdd: any = null;
+    let transactionToAdd: Transaction | null = null;
 
     const updated = items.map((item) => {
       if (item.id !== id) return item;
 
       const newStock = Math.max(0, safeNumber(item.stock) + delta);
+      const previousStock = safeNumber(item.stock);
 
       const product = productsById.get(item.productId);
       transactionToAdd = {
         id: generateId(),
+        inventoryItemId: item.id,
         productId: item.productId,
         productName: product?.name || "",
         variant: item.variant,
         type: delta > 0 ? "RESTOCK" : "REMOVE",
         quantity: Math.abs(delta),
+        previousStock,
+        newStock,
         date: Date.now(),
       };
 
@@ -310,9 +561,11 @@ export default function InventoryPage() {
     );
 
     if (transactionToAdd) {
-      addTransaction(transactionToAdd);
+      const tx = transactionToAdd as Transaction;
+      addTransaction(tx);
+      setTransactions(getTransactions());
       addActivity(
-        `${transactionToAdd.type === "RESTOCK" ? "Restocked" : "Removed stock from"} ${transactionToAdd.productName || "inventory item"}`
+        `${tx.type === "RESTOCK" ? "Restocked" : "Removed stock from"} ${tx.productName || "inventory item"}`
       );
     }
   };
@@ -325,21 +578,25 @@ export default function InventoryPage() {
       return;
     }
 
-    let transactionToAdd: any = null;
+    let transactionToAdd: Transaction | null = null;
 
     const updated = items.map((item) => {
       if (item.id !== id) return item;
 
-      const newStock = safeNumber(item.stock) + amount;
+      const previousStock = safeNumber(item.stock);
+      const newStock = previousStock + amount;
 
       const product = productsById.get(item.productId);
       transactionToAdd = {
         id: generateId(),
+        inventoryItemId: item.id,
         productId: item.productId,
         productName: product?.name || "",
         variant: item.variant,
         type: "RESTOCK",
         quantity: amount,
+        previousStock,
+        newStock,
         date: Date.now(),
       };
 
@@ -358,8 +615,10 @@ export default function InventoryPage() {
     );
 
     if (transactionToAdd) {
-      addTransaction(transactionToAdd);
-      addActivity(`Restocked ${transactionToAdd.productName || "inventory item"}`);
+      const tx = transactionToAdd as Transaction;
+      addTransaction(tx);
+      setTransactions(getTransactions());
+      addActivity(`Restocked ${tx.productName || "inventory item"}`);
     }
 
     setSelected(null);
@@ -463,6 +722,171 @@ export default function InventoryPage() {
                   {category}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="glass-card p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-xs uppercase tracking-[0.28em] text-slate-500">Stock movement recorder</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Use dedicated stock-in/stock-out entries so every change is logged once and can be edited later.
+                </p>
+              </div>
+              <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMovementTab("RESTOCK");
+                    setEditingMovementId(null);
+                    setMovementError("");
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    activeMovementTab === "RESTOCK"
+                      ? "bg-emerald-500 text-white"
+                      : "text-slate-700 hover:bg-white"
+                  }`}
+                >
+                  <ArrowDownCircle className="h-4 w-4" />
+                  Stock-In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMovementTab("REMOVE");
+                    setEditingMovementId(null);
+                    setMovementError("");
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    activeMovementTab === "REMOVE"
+                      ? "bg-rose-500 text-white"
+                      : "text-slate-700 hover:bg-white"
+                  }`}
+                >
+                  <ArrowUpCircle className="h-4 w-4" />
+                  Stock-Out
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <select
+                value={movementForm.inventoryItemId}
+                onChange={(event) =>
+                  setMovementForm((current) => ({
+                    ...current,
+                    inventoryItemId: event.target.value,
+                  }))
+                }
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
+              >
+                <option value="">Select inventory line</option>
+                {movementItemOptions.map(({ item, label }) => (
+                  <option key={item.id} value={item.id}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min={1}
+                value={movementForm.quantity}
+                onChange={(event) =>
+                  setMovementForm((current) => ({
+                    ...current,
+                    quantity: event.target.value,
+                  }))
+                }
+                placeholder="Quantity"
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
+              />
+              <input
+                type="date"
+                value={movementForm.date}
+                onChange={(event) =>
+                  setMovementForm((current) => ({
+                    ...current,
+                    date: event.target.value,
+                  }))
+                }
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900"
+              />
+              {editingMovementId ? (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={saveEditedMovement}
+                    className="flex-1 rounded-2xl bg-slate-950 px-4 py-3 font-semibold text-white transition hover:bg-slate-800"
+                  >
+                    Save Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEditMovement}
+                    className="rounded-2xl border border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={createMovement}
+                  className={`rounded-2xl px-4 py-3 font-semibold text-white transition ${
+                    activeMovementTab === "RESTOCK"
+                      ? "bg-emerald-600 hover:bg-emerald-500"
+                      : "bg-rose-600 hover:bg-rose-500"
+                  }`}
+                >
+                  {activeMovementTab === "RESTOCK" ? "Record Stock-In" : "Record Stock-Out"}
+                </button>
+              )}
+            </div>
+
+            {movementError ? <p className="mt-3 text-sm text-rose-700">{movementError}</p> : null}
+
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                {activeMovementTab === "RESTOCK" ? "Recent stock-in records" : "Recent stock-out records"}
+              </p>
+              <div className="mt-3 space-y-2">
+                {filteredMovementTransactions.length === 0 ? (
+                  <p className="text-sm text-slate-500">No records yet for this tab.</p>
+                ) : (
+                  filteredMovementTransactions.map((transaction) => {
+                    const product = productsById.get(transaction.productId);
+                    const label =
+                      product?.model || product?.name || transaction.productName || `Product #${transaction.productId}`;
+
+                    return (
+                      <div
+                        key={transaction.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"
+                      >
+                        <p className="text-sm text-slate-700">
+                          {label} ({transaction.variant || "-"}) • Qty {transaction.quantity} • {new Date(transaction.date).toLocaleDateString()}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditMovement(transaction)}
+                            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteMovementEntry(transaction)}
+                            className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
 

@@ -21,11 +21,14 @@ function toNumber(value: unknown) {
 }
 
 export default function StockProjectionPage() {
+  const today = new Date().toISOString().slice(0, 10);
   const [products, setProducts] = useState<Product[]>([]);
   const [inventory, setInventory] = useState<ReturnType<typeof getInventory>>([]);
   const [jobs, setJobs] = useState<ProjectionJob[]>([]);
   const [demands, setDemands] = useState<ProjectionDemand[]>([]);
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [projectionDate, setProjectionDate] = useState(today);
   const [jobForm, setJobForm] = useState({
     name: "",
     status: "Quoted" as ProjectionJob["status"],
@@ -103,15 +106,29 @@ export default function StockProjectionPage() {
     return stockByProductId;
   }, [inventory]);
 
+  const filteredJobIds = useMemo(() => {
+    return new Set(
+      jobs
+        .filter((job) => {
+          if (!projectionDate) return true;
+          return job.dateNeeded <= projectionDate;
+        })
+        .map((job) => job.id)
+    );
+  }, [jobs, projectionDate]);
+
   const demandByProduct = useMemo(() => {
     const map = new Map<number, number>();
 
     for (const demand of demands) {
+      if (!filteredJobIds.has(demand.jobId)) {
+        continue;
+      }
       map.set(demand.productId, (map.get(demand.productId) ?? 0) + toNumber(demand.requiredQty));
     }
 
     return map;
-  }, [demands]);
+  }, [demands, filteredJobIds]);
 
   const rows = useMemo(() => {
     return products
@@ -142,15 +159,37 @@ export default function StockProjectionPage() {
     const totalNeedToOrder = rows.reduce((sum, row) => sum + row.needToOrder, 0);
 
     return {
-      jobs: jobs.length,
+      jobs: filteredJobIds.size,
       lines: rows.length,
       needingOrder,
       totalNeedToOrder,
     };
-  }, [jobs.length, rows]);
+  }, [filteredJobIds, rows]);
 
   const addJob = () => {
     if (!jobForm.name.trim() || !jobForm.dateNeeded) {
+      return;
+    }
+
+    if (editingJobId) {
+      const targetJob = jobs.find((job) => job.id === editingJobId);
+      const updatedJobs = jobs.map((job) =>
+        job.id === editingJobId
+          ? {
+              ...job,
+              name: jobForm.name.trim(),
+              status: jobForm.status,
+              dateNeeded: jobForm.dateNeeded,
+            }
+          : job
+      );
+      setJobs(updatedJobs);
+      saveProjectionJobs(updatedJobs);
+      if (targetJob) {
+        addActivity(`Updated projection job ${targetJob.name} to ${jobForm.name.trim()} (${jobForm.status}) for ${jobForm.dateNeeded}`);
+      }
+      setEditingJobId(null);
+      setJobForm({ name: "", status: "Quoted", dateNeeded: "" });
       return;
     }
 
@@ -179,6 +218,24 @@ export default function StockProjectionPage() {
     if (targetJob) {
       addActivity(`Removed projection job ${targetJob.name}`);
     }
+    if (editingJobId === jobId) {
+      setEditingJobId(null);
+      setJobForm({ name: "", status: "Quoted", dateNeeded: "" });
+    }
+  };
+
+  const editJob = (job: ProjectionJob) => {
+    setEditingJobId(job.id);
+    setJobForm({
+      name: job.name,
+      status: job.status,
+      dateNeeded: job.dateNeeded,
+    });
+  };
+
+  const cancelEditJob = () => {
+    setEditingJobId(null);
+    setJobForm({ name: "", status: "Quoted", dateNeeded: "" });
   };
 
   const addDemand = () => {
@@ -306,7 +363,7 @@ export default function StockProjectionPage() {
 
       <div className="grid gap-4 sm:grid-cols-4">
         <div className="metric-card metric-card-neutral">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Upcoming Jobs</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Jobs in Forecast</p>
           <p className="mt-2 text-3xl font-semibold text-slate-950">{projectionStats.jobs}</p>
         </div>
         <div className="metric-card metric-card-amber">
@@ -327,7 +384,9 @@ export default function StockProjectionPage() {
         <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Upcoming jobs and item demand</p>
 
         <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Add upcoming job</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+            {editingJobId ? "Edit upcoming job" : "Add upcoming job"}
+          </p>
           <div className="mt-3 grid gap-3 md:grid-cols-4">
             <input
               type="text"
@@ -361,9 +420,18 @@ export default function StockProjectionPage() {
               onClick={addJob}
               className="rounded-2xl bg-slate-950 px-4 py-3 font-semibold text-white transition hover:bg-slate-800"
             >
-              Add Job
+              {editingJobId ? "Save Job" : "Add Job"}
             </button>
           </div>
+          {editingJobId ? (
+            <button
+              type="button"
+              onClick={cancelEditJob}
+              className="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+            >
+              Cancel edit
+            </button>
+          ) : null}
         </div>
 
         <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -452,8 +520,15 @@ export default function StockProjectionPage() {
                       <span className="text-xs text-slate-500">Need by {job.dateNeeded}</span>
                       <button
                         type="button"
+                        onClick={() => editJob(job)}
+                        className="ml-auto rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+                      >
+                        Edit Job
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => removeJob(job.id)}
-                        className="ml-auto rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700"
+                        className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700"
                       >
                         Remove Job
                       </button>
@@ -491,6 +566,36 @@ export default function StockProjectionPage() {
       </div>
 
       <div className="glass-card overflow-x-auto">
+        <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 px-4 py-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Projected / target date</p>
+            <input
+              type="date"
+              value={projectionDate}
+              onChange={(event) => setProjectionDate(event.target.value)}
+              className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setProjectionDate("")}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+          >
+            Use all dates
+          </button>
+          <button
+            type="button"
+            onClick={() => setProjectionDate(today)}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+          >
+            Reset to today
+          </button>
+          <p className="text-xs text-slate-500">
+            {projectionDate
+              ? `Forecast includes jobs needed on or before ${projectionDate}.`
+              : "Forecast includes all upcoming jobs."}
+          </p>
+        </div>
         <table className="sticky-table-header min-w-full text-sm text-slate-700">
           <thead className="bg-slate-100 text-slate-600">
             <tr>

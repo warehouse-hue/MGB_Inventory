@@ -6,6 +6,7 @@ export type Transaction = {
   id: number;
   type: TransactionType;
   productId: number;
+  inventoryItemId?: number;
   productName?: string;
   variant?: string;
   quantity: number;
@@ -42,6 +43,18 @@ function saveTransactions(transactions: Transaction[]) {
 export function addTransaction(transaction: Transaction) {
   const current = getTransactions();
   const updated = [transaction, ...current];
+  saveTransactions(updated);
+}
+
+export function updateTransaction(transaction: Transaction) {
+  const current = getTransactions();
+  const updated = current.map((item) => (item.id === transaction.id ? transaction : item));
+  saveTransactions(updated);
+}
+
+export function removeTransaction(id: number) {
+  const current = getTransactions();
+  const updated = current.filter((item) => item.id !== id);
   saveTransactions(updated);
 }
 
