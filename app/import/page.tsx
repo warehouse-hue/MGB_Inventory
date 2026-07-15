@@ -180,6 +180,56 @@ function inferBrand(...values: Array<string | undefined>) {
   return "";
 }
 
+function inferSupplierName(reference: string | undefined, suppliers: Supplier[]) {
+  const matchedSupplier = resolveSupplierName(reference, suppliers);
+  if (matchedSupplier && matchedSupplier !== (reference || "").trim()) {
+    return matchedSupplier;
+  }
+
+  const raw = (reference || "").trim();
+  if (!raw) return "";
+
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+  try {
+    const url = new URL(withProtocol);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    const hostParts = hostname.split(".").filter(Boolean);
+
+    if (hostParts.length === 0) {
+      return raw;
+    }
+
+    const compoundSuffixes = [
+      "com.au",
+      "net.au",
+      "org.au",
+      "edu.au",
+      "gov.au",
+      "co.uk",
+      "com.nz",
+      "co.nz",
+      "com.sg",
+      "com.br",
+      "co.jp",
+      "co.in",
+      "com.mx",
+    ];
+
+    const hostWithoutCompoundSuffix = compoundSuffixes.some((suffix) => hostname.endsWith(`.${suffix}`))
+      ? hostParts.slice(0, -3)
+      : hostParts.slice(0, -1);
+
+    const companyLabel = (hostWithoutCompoundSuffix.at(-1) || hostParts[0] || raw)
+      .replace(/[^a-z0-9]+/g, "")
+      .trim();
+
+    return companyLabel || raw;
+  } catch {
+    return raw;
+  }
+}
+
 function hasKnownBrand(value: string | undefined) {
   if (!value) return false;
   const normalized = value.toLowerCase();
@@ -539,7 +589,7 @@ function buildImportPayload(
     const defaultOrderQty = parseNumber(readColumn(row, columnMap, "defaultOrderQty"));
     const productCode = readColumn(row, columnMap, "productCode");
     const supplierReference = readColumn(row, columnMap, "supplier");
-    const supplier = resolveSupplierName(supplierReference, suppliers);
+    const supplier = inferSupplierName(supplierReference, suppliers);
     const lastBuyPrice = parseNumber(readColumn(row, columnMap, "lastBuyPrice"));
     const itemType = hasItemTypeColumn ? readColumn(row, columnMap, "category") : "";
     const rawBrandUses = readColumn(row, columnMap, "brandUses") || itemType;
