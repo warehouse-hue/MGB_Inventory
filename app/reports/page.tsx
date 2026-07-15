@@ -2,31 +2,56 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { BarChart3 } from "lucide-react";
-import { getActivityLog, clearActivityLog, type Activity } from "../lib/storage";
+import {
+  clearActivityLog,
+  getActivityLog,
+  getInventory,
+  getOrders,
+  getProducts,
+  getSuppliers,
+  getTransactions,
+  type Activity,
+  type InventoryItem,
+  type PurchaseOrder,
+  type Product,
+  type Supplier,
+} from "../lib/storage";
+import { getMovementSummary, getTopActiveProducts } from "../lib/reports";
+import type { Transaction } from "../lib/transactions";
 
 const ITEMS_PER_PAGE = 100;
 
 export default function ReportsPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    const refreshActivities = () => {
+    const refreshReports = () => {
       setActivities(getActivityLog());
+      setTransactions(getTransactions());
+      setProducts(getProducts());
+      setInventory(getInventory());
+      setOrders(getOrders());
+      setSuppliers(getSuppliers());
     };
 
-    refreshActivities();
+    refreshReports();
 
-    const handleStorageUpdate = () => refreshActivities();
-    const handleFocus = () => refreshActivities();
+    const handleStorageUpdate = () => refreshReports();
+    const handleFocus = () => refreshReports();
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        refreshActivities();
+        refreshReports();
       }
     };
-    const handleBrowserStorage = () => refreshActivities();
+    const handleBrowserStorage = () => refreshReports();
 
     window.addEventListener("mgb-storage-updated", handleStorageUpdate as EventListener);
     window.addEventListener("storage", handleBrowserStorage);
@@ -42,15 +67,38 @@ export default function ReportsPage() {
   }, []);
 
   const stats = useMemo(() => {
+    const movementSummary = getMovementSummary(transactions);
+    const lowStockCount = inventory.filter((item) => {
+      const product = products.find((currentProduct) => currentProduct.id === item.productId);
+      const minimum = Number(product?.minimum ?? 0);
+      if (minimum <= 0 || item.stock <= 0) return false;
+      return item.stock < minimum;
+    }).length;
+
+    const outOfStockCount = inventory.filter((item) => {
+      if (item.stock !== 0) return false;
+      const product = products.find((currentProduct) => currentProduct.id === item.productId);
+      return Number(product?.minimum ?? 0) > 0;
+    }).length;
+
     return {
-      totalChanges: activities.length,
+      totalChanges: activities.length + transactions.length,
       productEdits: activities.filter((activity) => activity.message.toLowerCase().includes("product")).length,
       supplierEdits: activities.filter((activity) => activity.message.toLowerCase().includes("supplier")).length,
-      inventoryEdits: activities.filter((activity) => /(inventory|stock|restock|remove)/i.test(activity.message)).length,
-      orderEdits: activities.filter((activity) => /(order|purchase)/i.test(activity.message)).length,
-      latestMessage: activities[0]?.message || "No edits recorded yet",
+      inventoryEdits: movementSummary.totalIn + movementSummary.totalOut,
+      orderEdits: activities.filter((activity) => /(order|purchase)/i.test(activity.message)).length + orders.length,
+      latestMessage: activities[0]?.message || transactions[0]
+        ? `${transactions[0]?.type || "Movement"} activity recorded`
+        : "No edits recorded yet",
+      products: products.length,
+      inventoryLines: inventory.length,
+      suppliers: suppliers.length,
+      openOrders: orders.filter((order) => order.status === "OPEN").length,
+      lowStockCount,
+      outOfStockCount,
+      movementSummary,
     };
-  }, [activities]);
+  }, [activities, inventory, orders, products, suppliers, transactions]);
 
   const handleClearHistory = () => {
     clearActivityLog();
@@ -117,8 +165,8 @@ export default function ReportsPage() {
       <div className="glass-card p-6">
         <div className="mb-4">
           <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Performance summary</p>
-          <h2 className="text-2xl font-semibold text-slate-950 mt-2">Recent changes</h2>
-          <p className="mt-2 text-sm text-slate-600">See the latest app edits and which sections were updated.</p>
+          <h2 className="text-2xl font-semibold text-slate-950 mt-2">Live data snapshot</h2>
+          <p className="mt-2 text-sm text-slate-600">This dashboard now tracks inventory, stock movements, suppliers, orders, and activity together.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -127,16 +175,77 @@ export default function ReportsPage() {
             <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.totalChanges}</p>
           </div>
           <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
-            <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Product edits</p>
-            <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.productEdits}</p>
+            <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Inventory lines</p>
+            <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.inventoryLines}</p>
           </div>
           <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
-            <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Supplier edits</p>
-            <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.supplierEdits}</p>
+            <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Suppliers</p>
+            <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.suppliers}</p>
+          </div>
+          <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
+            <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Open orders</p>
+            <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.openOrders}</p>
+          </div>
+          <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
+            <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Stock-in / out</p>
+            <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.movementSummary.totalIn} / {stats.movementSummary.totalOut}</p>
+          </div>
+          <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
+            <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Low stock</p>
+            <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.lowStockCount}</p>
+          </div>
+          <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
+            <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Out of stock</p>
+            <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.outOfStockCount}</p>
           </div>
           <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
             <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Latest activity</p>
             <p className="mt-3 text-sm text-slate-950">{stats.latestMessage}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <div className="glass-card p-6">
+          <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Movement summary</p>
+          <h2 className="mt-2 text-xl font-semibold text-slate-950">Stock tracking</h2>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
+              <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Restock count</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.movementSummary.restockCount}</p>
+            </div>
+            <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
+              <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Remove count</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.movementSummary.removeCount}</p>
+            </div>
+            <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
+              <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Net movement</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.movementSummary.netMovement}</p>
+            </div>
+            <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
+              <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Total units moved</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.movementSummary.totalIn + stats.movementSummary.totalOut}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-6">
+          <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Top active products</p>
+          <h2 className="mt-2 text-xl font-semibold text-slate-950">Most moved items</h2>
+          <div className="mt-4 space-y-3">
+            {getTopActiveProducts(transactions).length === 0 ? (
+              <p className="text-slate-500">No movement records yet.</p>
+            ) : (
+              getTopActiveProducts(transactions).map((entry) => {
+                const product = products.find((item) => item.id === Number(entry.productId));
+                return (
+                  <div key={entry.productId} className="rounded-3xl bg-slate-50 p-4 border border-slate-200">
+                    <p className="font-semibold text-slate-950">{product?.model || product?.name || `Product #${entry.productId}`}</p>
+                    <p className="text-sm text-slate-500">Activity score {entry.activity}</p>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>
