@@ -391,8 +391,18 @@ export default function ProductsPage() {
     const settings = getAppSettings();
     const stock = getProductStock(product.id);
     const threshold = safeNumber(product.minimum ?? 0);
+    const notStored = stock <= 0 && threshold <= 0;
     const trackedOutOfStock =
       stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0);
+
+    if (notStored) {
+      return {
+        label: "Not Stored",
+        fillClass: "bg-slate-300",
+        badgeClass: "bg-slate-200 text-slate-700",
+        fill: 0,
+      };
+    }
 
     if (trackedOutOfStock) {
       return {
