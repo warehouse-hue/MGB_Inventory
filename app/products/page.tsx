@@ -232,30 +232,41 @@ export default function ProductsPage() {
     const currentProduct = products.find((product) => product.id === editTarget);
     if (!currentProduct) return;
 
+    const nextCategory = editForm.category || currentProduct.category;
+    const nextBrandUses = editForm.brandUses.trim();
+    const nextModel = editForm.model.trim();
+    const nextSizeGauge = editForm.sizeGauge.trim();
+    const nextProductCode = editForm.productCode.trim();
+    const nextOrderQty = safeNumber(editForm.orderQty);
+    const nextMinimum = editForm.minimum ? safeNumber(editForm.minimum) : undefined;
+    const nextOrdered = editForm.ordered;
+    const nextOrderedDate = editForm.orderedDate;
+    const nextSupplier = resolveSupplierName(editForm.supplier.trim(), suppliers);
+    const nextLastBuyPrice = editForm.lastBuyPrice
+      ? safeNumber(editForm.lastBuyPrice)
+      : undefined;
+
     const updatedProducts = products.map((product) =>
       product.id === editTarget
         ? {
             ...product,
-          category: editForm.category || product.category,
-            brandUses: editForm.brandUses.trim(),
-            model: editForm.model.trim(),
-            sizeGauge: editForm.sizeGauge.trim(),
-            productCode: editForm.productCode.trim(),
-            orderQty: safeNumber(editForm.orderQty),
-            minimum: editForm.minimum ? safeNumber(editForm.minimum) : undefined,
-            ordered: editForm.ordered,
-            orderedDate: editForm.orderedDate,
-            supplier: resolveSupplierName(editForm.supplier.trim(), suppliers),
-            lastBuyPrice: editForm.lastBuyPrice
-              ? safeNumber(editForm.lastBuyPrice)
-              : undefined,
+            category: nextCategory,
+            brandUses: nextBrandUses,
+            model: nextModel,
+            sizeGauge: nextSizeGauge,
+            productCode: nextProductCode,
+            orderQty: nextOrderQty,
+            minimum: nextMinimum,
+            ordered: nextOrdered,
+            orderedDate: nextOrderedDate,
+            supplier: nextSupplier,
+            lastBuyPrice: nextLastBuyPrice,
           }
         : product
     );
 
     saveProducts(updatedProducts);
     setProducts(updatedProducts);
-    addActivity(`Updated product ${currentProduct.name}`);
 
     const currentOrders = getOrders();
     const existingOrder = currentOrders.find((order) => order.productId === editTarget);
@@ -303,6 +314,36 @@ export default function ProductsPage() {
 
     saveInventory(updatedInventory);
     setInventory(updatedInventory);
+
+    const currentStockTotal = inventory
+      .filter((item) => item.productId === editTarget)
+      .reduce((sum, item) => sum + safeNumber(item.stock), 0);
+    const changedFields: string[] = [];
+
+    if ((currentProduct.category || "") !== nextCategory) changedFields.push(`category to ${nextCategory || "-"}`);
+    if ((currentProduct.brandUses || "") !== nextBrandUses) changedFields.push(`brand/uses to ${nextBrandUses || "-"}`);
+    if ((currentProduct.model || "") !== nextModel) changedFields.push(`model to ${nextModel || "-"}`);
+    if ((currentProduct.sizeGauge || "") !== nextSizeGauge) changedFields.push(`size/gauge to ${nextSizeGauge || "-"}`);
+    if ((currentProduct.productCode || "") !== nextProductCode) changedFields.push(`product code to ${nextProductCode || "-"}`);
+    if (safeNumber(currentProduct.orderQty ?? 0) !== nextOrderQty) changedFields.push(`order qty to ${nextOrderQty}`);
+    if (safeNumber(currentProduct.minimum ?? 0) !== safeNumber(nextMinimum ?? 0)) {
+      changedFields.push(`minimum to ${nextMinimum ?? 0}`);
+    }
+    if (Boolean(currentProduct.ordered) !== nextOrdered) changedFields.push(nextOrdered ? "marked ordered" : "cleared ordered status");
+    if ((currentProduct.orderedDate || "") !== nextOrderedDate && nextOrdered) changedFields.push(`ordered date to ${nextOrderedDate || "-"}`);
+    if ((resolveSupplierName(currentProduct.supplier || "", suppliers) || "") !== nextSupplier) {
+      changedFields.push(`supplier to ${nextSupplier || "-"}`);
+    }
+    if (safeNumber(currentProduct.lastBuyPrice ?? 0) !== safeNumber(nextLastBuyPrice ?? 0)) {
+      changedFields.push(`last buy price to ${nextLastBuyPrice ?? 0}`);
+    }
+    if (currentStockTotal !== currentStock) changedFields.push(`stock to ${currentStock}`);
+
+    addActivity(
+      changedFields.length > 0
+        ? `Updated ${currentProduct.name}: ${changedFields.join(", ")}`
+        : `Opened and saved ${currentProduct.name} with no field changes`
+    );
     setEditTarget(null);
   };
 

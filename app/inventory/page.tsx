@@ -35,7 +35,7 @@ function isLowStockByMode(stock: number, minimum: number, mode: "lt" | "lte") {
   return mode === "lte" ? stock <= minimum : stock < minimum;
 }
 
-type StatusFilter = "ALL" | "LOW" | "OUT" | "ORDERED";
+type StatusFilter = "ALL" | "LOW" | "OUT" | "NOT_STORED";
 const ITEMS_PER_PAGE = 100;
 
 export default function InventoryPage() {
@@ -76,6 +76,7 @@ export default function InventoryPage() {
     const settings = getAppSettings();
     const stock = safeNumber(item.stock);
     const threshold = Number(product?.minimum ?? 0);
+    const notStored = stock <= 0 && threshold <= 0;
     const trackedOutOfStock =
       stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0);
 
@@ -87,8 +88,8 @@ export default function InventoryPage() {
       return trackedOutOfStock;
     }
 
-    if (activeStatusFilter === "ORDERED") {
-      return Boolean(product?.ordered);
+    if (activeStatusFilter === "NOT_STORED") {
+      return notStored;
     }
 
     return true;
@@ -168,7 +169,6 @@ export default function InventoryPage() {
 
   const inventoryStats = useMemo(() => {
     const settings = getAppSettings();
-    const openOrders = getOrders().filter((order) => order.status === "OPEN");
     const stats = items.reduce(
       (acc, item) => {
         const stock = safeNumber(item.stock);
@@ -176,7 +176,9 @@ export default function InventoryPage() {
         const threshold = Number(product?.minimum ?? 0);
 
         acc.totalUnits += stock;
-        if (stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0)) {
+        if (stock <= 0 && threshold <= 0) {
+          acc.notStored += 1;
+        } else if (stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0)) {
           acc.outOfStock += 1;
         } else if (isLowStockByMode(stock, threshold, settings.lowStockMode)) {
           acc.lowStock += 1;
@@ -184,7 +186,7 @@ export default function InventoryPage() {
 
         return acc;
       },
-      { totalUnits: 0, lowStock: 0, outOfStock: 0 }
+      { totalUnits: 0, lowStock: 0, outOfStock: 0, notStored: 0 }
     );
 
     return {
@@ -192,7 +194,7 @@ export default function InventoryPage() {
       totalUnits: stats.totalUnits,
       lowStock: stats.lowStock,
       outOfStock: stats.outOfStock,
-      openOrders: openOrders.length,
+      notStored: stats.notStored,
     };
   }, [items, productsById]);
 
@@ -432,11 +434,11 @@ export default function InventoryPage() {
               onClick={() => setActiveStatusFilter("OUT")}
             />
             <StatChip
-              label="POs"
-              value={inventoryStats.openOrders}
-              tone="sky"
-              isActive={activeStatusFilter === "ORDERED"}
-              onClick={() => setActiveStatusFilter("ORDERED")}
+              label="Not Stored"
+              value={inventoryStats.notStored}
+              tone="slate"
+              isActive={activeStatusFilter === "NOT_STORED"}
+              onClick={() => setActiveStatusFilter("NOT_STORED")}
             />
           </div>
         </div>
@@ -498,8 +500,8 @@ export default function InventoryPage() {
                     ? " in low stock"
                     : activeStatusFilter === "OUT"
                       ? " out of stock"
-                      : activeStatusFilter === "ORDERED"
-                        ? " marked ordered"
+                      : activeStatusFilter === "NOT_STORED"
+                        ? " marked not stored"
                         : ""}.
                 </p>
               </div>
