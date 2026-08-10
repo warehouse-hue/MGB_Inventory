@@ -13,6 +13,7 @@ import {
   BarChart3,
   Settings,
   ChevronRight,
+  CheckSquare,
   LucideIcon,
 } from "lucide-react";
 
@@ -33,6 +34,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
       { href: "/inventory", label: "Inventory", icon: Boxes },
+      { href: "/inventory-count", label: "Inventory Count", icon: CheckSquare },
       { href: "/products", label: "Add Inventory", icon: SquarePlus },
       { href: "/inventory-order", label: "Low/Out of Stock", icon: TriangleAlert },
     ],
