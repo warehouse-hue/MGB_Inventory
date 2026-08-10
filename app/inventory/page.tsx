@@ -447,44 +447,44 @@ export default function InventoryPage() {
       <div className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
         <div className="space-y-4">
           <div className="glass-card p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
-                  Inventory search
-                </p>
-                <h2 className="text-xl font-semibold text-slate-950 mt-2">
-                  Find product stock fast
-                </h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  Filter live stock lines by category or search by product name.
-                </p>
+            <div>
+              <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
+                Inventory search
+              </p>
+              <h2 className="text-xl font-semibold text-slate-950 mt-2">
+                Find product stock fast
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Filter live stock lines by category or search by product name.
+              </p>
+            </div>
+          </div>
+
+          <div className="glass-card p-4">
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-3">
+                {categoryTabs.map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => handleCategoryTabClick(category)}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      activeCategory === category
+                        ? "bg-slate-950 text-white shadow-sm"
+                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
               </div>
 
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search products..."
-                className="w-full sm:w-80 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-400"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-400"
               />
-            </div>
-          </div>
-
-          <div className="glass-card p-4">
-            <div className="flex flex-wrap gap-3">
-              {categoryTabs.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => handleCategoryTabClick(category)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                    activeCategory === category
-                      ? "bg-slate-950 text-white shadow-sm"
-                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
-                  }`}
-                >
-                  {category}
-                </button>
-              ))}
             </div>
           </div>
 

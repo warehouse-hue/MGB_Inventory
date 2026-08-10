@@ -179,6 +179,30 @@ function buildHtmlFromMarkdown(markdown: string) {
   `;
 }
 
+function classifyEmailProviderError(message: string | undefined, status: number) {
+  const normalized = (message || "").toLowerCase();
+
+  if (status === 401 || normalized.includes("api key is invalid") || normalized.includes("invalid api key")) {
+    return "Email is configured with an invalid RESEND_API_KEY. Update the deployment environment value and redeploy.";
+  }
+
+  if (
+    normalized.includes("verify a domain") ||
+    normalized.includes("sender") ||
+    normalized.includes("from address") ||
+    normalized.includes("not allowed") ||
+    normalized.includes("forbidden")
+  ) {
+    return "Email sender is not allowed by Resend. Check OVERVIEW_EMAIL_FROM and verify the sending domain/address in Resend.";
+  }
+
+  if (normalized.includes("rate limit") || status === 429) {
+    return "Email provider rate limit reached. Try again shortly.";
+  }
+
+  return message || "Email provider rejected the request.";
+}
+
 export async function POST(request: Request) {
   const resendApiKey = process.env.RESEND_API_KEY;
   const from = process.env.OVERVIEW_EMAIL_FROM || "onboarding@resend.dev";
@@ -243,7 +267,7 @@ export async function POST(request: Request) {
     if (!resendResponse.ok) {
       return Response.json(
         {
-          error: resendPayload.message || "Email provider rejected the request.",
+          error: classifyEmailProviderError(resendPayload.message, resendResponse.status),
         },
         { status: resendResponse.status }
       );
