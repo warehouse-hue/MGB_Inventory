@@ -87,60 +87,43 @@ export default function DashboardPage() {
   const topOutOfStockItems = stock.outOfStockItems.slice(0, 4);
 
   return (
-    <div className="p-6 space-y-6 max-w-[2200px] mx-auto animate-fade-in-up">
-
-      {/* HEADER */}
-      <div className="command-hero command-hero-dashboard">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">
-              MGB OPS BOARD
-            </p>
-            <div className="mt-3 command-slip-icon">
-              <Radar />
-              Dashboard
-            </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Dashboard Command View
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
-              Live snapshot of shortage pressure, purchase flow, and stock risk across the warehouse.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <SignalChip label="Products" value={stock.totalProducts} tone="cyan" />
-            <SignalChip label="Alert Load" value={radarStats.totalAlerts} tone="amber" />
-            <SignalChip label="Inbound POs" value={radarStats.inbound} tone="sky" />
-            <SignalChip label="On Order" value={radarStats.inboundUnits} tone="emerald" />
-          </div>
-        </div>
-      </div>
-
-      {/* LOADING STATE (NO EARLY HOOK EXIT) */}
-      {!mounted ? (
-        <div className="text-slate-500">Loading dashboard...</div>
-      ) : (
-        <>
-          {/* KPI CARDS */}
-          <div className="rounded-3xl border border-slate-200/80 bg-slate-50/90 p-6 shadow-sm">
-            <div className="mb-4">
-              <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
-                Key metrics
+    <div className="min-h-[calc(100vh-2rem)] p-6">
+      <div className="mx-auto grid max-w-[2200px] gap-6 animate-fade-in-up">
+        <section className="rounded-[32px] border border-slate-200/80 bg-white p-8 shadow-sm">
+          <div className="flex flex-col gap-8 xl:flex-row xl:items-center xl:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-[0.72rem] uppercase tracking-[0.28em] text-slate-400">
+                MGB OPS BOARD
               </p>
-              <h2 className="text-2xl font-semibold text-slate-950">
-                Inventory overview
-              </h2>
-              <p className="mt-2 text-sm text-slate-600">
-                Quick stats for stock levels, movement, and alerts.
+              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+                Inventory command center
+              </h1>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600">
+                Live snapshot of stock pressure, open orders, and inventory risk across the warehouse.
               </p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <SignalChip label="Products" value={stock.totalProducts} tone="cyan" />
+              <SignalChip label="Alerts" value={radarStats.totalAlerts} tone="amber" />
+              <SignalChip label="Open POs" value={radarStats.inbound} tone="sky" />
+              <SignalChip label="Units on order" value={radarStats.inboundUnits} tone="emerald" />
+            </div>
+          </div>
+        </section>
+
+        {!mounted ? (
+          <div className="rounded-[32px] border border-slate-200/80 bg-white p-8 text-slate-500 shadow-sm">
+            Loading dashboard...
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-5 xl:grid-cols-4">
               <Card
                 label="Low Stock"
                 value={stock.lowStockCount}
                 description="Items needing attention soon."
-                accentClassName="bg-amber-50 border-amber-200"
+                accentClassName="bg-slate-50 border-slate-200 text-slate-950"
                 href="/inventory"
               />
               <Card
@@ -149,129 +132,136 @@ export default function DashboardPage() {
                 description={
                   settings.includeNonStockedInAlerts
                     ? "Inventory entries currently at zero stock."
-                    : "Tracked inventory entries at zero stock (minimum threshold above zero)."
+                    : "Tracked inventory entries currently at zero stock (minimum threshold above zero)."
                 }
-                accentClassName="bg-rose-50 border-rose-200"
+                accentClassName="bg-slate-50 border-slate-200 text-slate-950"
                 href="/inventory"
               />
               <Card
                 label="On Board for Delivery"
                 value={openOrderSummary.count}
                 description="Purchase orders still awaiting completion."
-                accentClassName="bg-sky-50 border-sky-200"
+                accentClassName="bg-slate-50 border-slate-200 text-slate-950"
                 href="/purchase-orders"
               />
               <Card
                 label="Units on Order"
                 value={openOrderSummary.units}
                 description="Total quantity currently on open purchase orders."
-                accentClassName="bg-white border-slate-200/80"
+                accentClassName="bg-slate-50 border-slate-200 text-slate-950"
                 href="/purchase-orders"
               />
             </div>
-          </div>
 
-          <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-            <div className="rounded-3xl border border-slate-900 bg-slate-950 p-6 text-white shadow-[0_24px_60px_rgba(8,15,24,0.25)]">
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <p className="font-mono text-xs uppercase tracking-[0.3em] text-cyan-300/75">
-                    Alert Radar
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold tracking-tight">Stock Pressure Matrix</h2>
-                  <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">
-                    Technical readout of shortage severity and inbound stock coverage based on your current alert settings.
-                  </p>
+            <div className="grid gap-5 xl:grid-cols-[1.4fr_0.9fr]">
+              <div className="rounded-[32px] border border-slate-200/90 bg-white p-6 shadow-sm">
+                <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+                  <div>
+                    <p className="text-[0.72rem] uppercase tracking-[0.28em] text-slate-500">
+                      Alert radar
+                    </p>
+                    <h2 className="mt-2 text-3xl font-semibold text-slate-950">
+                      Stock pressure matrix
+                    </h2>
+                    <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+                      A consolidated readout of shortage severity, inbound coverage, and current stock risk.
+                    </p>
+                  </div>
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+                    <p className="text-[0.65rem] uppercase tracking-[0.32em] text-slate-500">
+                      Pressure score
+                    </p>
+                    <p className="mt-2 text-4xl font-semibold text-slate-950">
+                      {radarStats.pressureScore}
+                    </p>
+                  </div>
                 </div>
-                <div className="rounded-2xl border border-cyan-500/30 bg-cyan-400/10 px-4 py-3">
-                  <p className="font-mono text-[0.65rem] uppercase tracking-[0.32em] text-cyan-200/75">
-                    Pressure Score
-                  </p>
-                  <p className="mt-2 text-3xl font-semibold text-cyan-100">{radarStats.pressureScore}</p>
+
+                <div className="mt-8 space-y-5">
+                  <MeterRow
+                    label="Low stock exposure"
+                    value={stock.lowStockCount}
+                    max={Math.max(8, radarStats.totalAlerts || 1)}
+                    tone="amber"
+                  />
+                  <MeterRow
+                    label="Out of stock exposure"
+                    value={radarStats.criticalOutOfStockCount}
+                    max={Math.max(8, radarStats.totalAlerts || 1)}
+                    tone="rose"
+                  />
+                  <MeterRow
+                    label="Inbound purchase orders"
+                    value={openOrderSummary.count}
+                    max={Math.max(6, openOrderSummary.count || 1)}
+                    tone="sky"
+                  />
+                  <MeterRow
+                    label="Inbound units"
+                    value={openOrderSummary.units}
+                    max={Math.max(20, openOrderSummary.units || 1)}
+                    tone="emerald"
+                  />
                 </div>
               </div>
 
-              <div className="mt-6 space-y-4">
-                <MeterRow
-                  label="Low stock exposure"
-                  value={stock.lowStockCount}
-                  max={Math.max(8, radarStats.totalAlerts || 1)}
-                  tone="amber"
-                />
-                <MeterRow
-                  label="Out of stock exposure"
-                  value={radarStats.criticalOutOfStockCount}
-                  max={Math.max(8, radarStats.totalAlerts || 1)}
-                  tone="rose"
-                />
-                <MeterRow
-                  label="Inbound purchase orders"
-                  value={openOrderSummary.count}
-                  max={Math.max(6, openOrderSummary.count || 1)}
-                  tone="sky"
-                />
-                <MeterRow
-                  label="Inbound units"
-                  value={openOrderSummary.units}
-                  max={Math.max(20, openOrderSummary.units || 1)}
-                  tone="emerald"
-                />
+              <div className="grid gap-5">
+                <div className="rounded-[32px] border border-slate-200/90 bg-slate-50 p-6 shadow-sm">
+                  <p className="text-[0.72rem] uppercase tracking-[0.28em] text-slate-500">
+                    Critical queue
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                    Low stock watchlist
+                  </h2>
+                  <div className="mt-5 space-y-3">
+                    {topLowStockItems.length === 0 ? (
+                      <EmptyState message="No low stock items are currently flagged." />
+                    ) : (
+                      topLowStockItems.map((item: any) => (
+                        <QueueRow
+                          key={item.id}
+                          label={`Product #${item.productId}`}
+                          value={`${item.stock} left`}
+                          tone="amber"
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-[32px] border border-slate-200/90 bg-slate-50 p-6 shadow-sm">
+                  <p className="text-[0.72rem] uppercase tracking-[0.28em] text-slate-500">
+                    Zero-stock queue
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                    Out of stock now
+                  </h2>
+                  <div className="mt-5 space-y-3">
+                    {topOutOfStockItems.length === 0 ? (
+                      <EmptyState
+                        message={
+                          settings.includeNonStockedInAlerts
+                            ? "No inventory entries are fully depleted."
+                            : "No tracked inventory entries are fully depleted."
+                        }
+                      />
+                    ) : (
+                      topOutOfStockItems.map((item: any) => (
+                        <QueueRow
+                          key={item.id}
+                          label={`Product #${item.productId}`}
+                          value="0 in stock"
+                          tone="rose"
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-
-            <div className="space-y-5">
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <p className="font-mono text-xs uppercase tracking-[0.3em] text-slate-500">
-                  Critical queue
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-950">Low Stock Watchlist</h2>
-                <div className="mt-5 space-y-3">
-                  {topLowStockItems.length === 0 ? (
-                    <EmptyState message="No low stock items are currently flagged." />
-                  ) : (
-                    topLowStockItems.map((item: any) => (
-                      <QueueRow
-                        key={item.id}
-                        label={`Product #${item.productId}`}
-                        value={`${item.stock} left`}
-                        tone="amber"
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <p className="font-mono text-xs uppercase tracking-[0.3em] text-slate-500">
-                  Zero-stock queue
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-950">Out of Stock Now</h2>
-                <div className="mt-5 space-y-3">
-                  {topOutOfStockItems.length === 0 ? (
-                    <EmptyState
-                      message={
-                        settings.includeNonStockedInAlerts
-                          ? "No inventory entries are fully depleted."
-                          : "No tracked inventory entries are fully depleted."
-                      }
-                    />
-                  ) : (
-                    topOutOfStockItems.map((item: any) => (
-                      <QueueRow
-                        key={item.id}
-                        label={`Product #${item.productId}`}
-                        value="0 in stock"
-                        tone="rose"
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -286,16 +276,18 @@ function SignalChip({
   tone: "cyan" | "amber" | "sky" | "emerald";
 }) {
   const toneClass = {
-    cyan: "border-cyan-200/70 bg-cyan-400/35 text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
-    amber: "border-amber-200/70 bg-amber-400/35 text-amber-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
-    sky: "border-sky-200/70 bg-sky-400/35 text-sky-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
-    emerald: "border-emerald-200/70 bg-emerald-400/35 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    cyan: "border-cyan-200/80 bg-cyan-100 text-slate-950",
+    amber: "border-amber-200/80 bg-amber-100 text-slate-950",
+    sky: "border-sky-200/80 bg-sky-100 text-slate-950",
+    emerald: "border-emerald-200/80 bg-emerald-100 text-slate-950",
   }[tone];
 
   return (
-    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
-      <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] opacity-80">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
+    <div className={`rounded-[28px] border px-4 py-3 ${toneClass}`}>
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] text-slate-600">
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
     </div>
   );
 }
@@ -313,19 +305,19 @@ function MeterRow({
 }) {
   const width = Math.max(6, Math.min(100, (value / Math.max(max, 1)) * 100));
   const toneClass = {
-    amber: "bg-amber-300",
-    rose: "bg-rose-300",
-    sky: "bg-sky-300",
-    emerald: "bg-emerald-300",
+    amber: "bg-amber-400",
+    rose: "bg-rose-400",
+    sky: "bg-sky-400",
+    emerald: "bg-emerald-400",
   }[tone];
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-4 text-sm">
-        <span className="text-slate-200">{label}</span>
-        <span className="font-mono text-cyan-100">{value}</span>
+        <span className="text-slate-600">{label}</span>
+        <span className="font-mono text-slate-900">{value}</span>
       </div>
-      <div className="h-2.5 rounded-full bg-white/10">
+      <div className="h-2.5 rounded-full bg-slate-100">
         <div className={`h-2.5 rounded-full ${toneClass}`} style={{ width: `${width}%` }} />
       </div>
     </div>
@@ -350,14 +342,14 @@ function QueueRow({
   tone: "amber" | "rose";
 }) {
   const toneClass = {
-    amber: "border-amber-200 bg-amber-50 text-amber-900",
-    rose: "border-rose-200 bg-rose-50 text-rose-900",
+    amber: "border-amber-200 bg-white text-amber-900",
+    rose: "border-rose-200 bg-white text-rose-900",
   }[tone];
 
   return (
-    <div className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${toneClass}`}>
-      <span className="font-medium">{label}</span>
-      <span className="font-mono text-sm">{value}</span>
+    <div className={`flex items-center justify-between rounded-3xl border px-4 py-4 ${toneClass}`}>
+      <span className="font-medium text-slate-900">{label}</span>
+      <span className="font-mono text-sm text-slate-600">{value}</span>
     </div>
   );
 }
@@ -376,7 +368,7 @@ function Card({
   accentClassName?: string;
   href?: string;
 }) {
-  const className = `rounded-3xl p-5 shadow-sm border transition duration-200 hover:-translate-y-1 hover:shadow-md ${accentClassName}`;
+  const className = `rounded-3xl p-5 shadow-sm border transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${accentClassName}`;
 
   const content = (
     <>

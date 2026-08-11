@@ -142,13 +142,13 @@ export default function ReportsPage() {
       <div className="command-hero command-hero-reports">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-sky-200/80">ACTIVITY INTELLIGENCE</p>
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">ACTIVITY INTELLIGENCE</p>
             <div className="mt-3 command-slip-icon">
               <BarChart3 />
               Reports
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Reports Command</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-sky-50/78 sm:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
               Review system activity, operational churn, and change patterns across inventory, suppliers, and orders.
             </p>
           </div>
@@ -347,10 +347,10 @@ function ReportChip({
   tone: "sky" | "cyan" | "emerald" | "violet";
 }) {
   const toneClass = {
-    sky: "border-sky-200/70 bg-sky-400/35 text-sky-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
-    cyan: "border-cyan-200/70 bg-cyan-400/35 text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
-    emerald: "border-emerald-200/70 bg-emerald-400/35 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
-    violet: "border-violet-200/70 bg-violet-400/35 text-violet-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    sky: "border-sky-200/80 bg-sky-100 text-slate-950",
+    cyan: "border-cyan-200/80 bg-cyan-100 text-slate-950",
+    emerald: "border-emerald-200/80 bg-emerald-100 text-slate-950",
+    violet: "border-violet-200/80 bg-violet-100 text-slate-950",
   }[tone];
 
   return (

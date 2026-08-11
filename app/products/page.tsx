@@ -476,7 +476,7 @@ export default function ProductsPage() {
       <div className="command-hero command-hero-products">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
               ITEM CREATION BAY
             </p>
             <div className="mt-3 command-slip-icon">
@@ -484,7 +484,7 @@ export default function ProductsPage() {
               Add Inventory
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Add Inventory Command</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
               Create new inventory items, assign reorder thresholds, and seed stock lines directly into the warehouse system.
             </p>
           </div>
@@ -1020,10 +1020,10 @@ function ProductStatChip({
   tone: "cyan" | "amber" | "rose" | "emerald";
 }) {
   const toneClass = {
-    cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100",
-    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
-    rose: "border-rose-300/25 bg-rose-300/10 text-rose-50",
-    emerald: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
+    cyan: "border-cyan-200/80 bg-cyan-100 text-slate-950",
+    amber: "border-amber-200/80 bg-amber-100 text-slate-950",
+    rose: "border-rose-200/80 bg-rose-100 text-slate-950",
+    emerald: "border-emerald-200/80 bg-emerald-100 text-slate-950",
   }[tone];
 
   return (

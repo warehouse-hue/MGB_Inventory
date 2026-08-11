@@ -226,7 +226,7 @@ export default function InventoryCountPage() {
         <div className="command-hero command-hero-inventory">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">
+              <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
                 INVENTORY COUNT TOOL
               </p>
               <div className="mt-3 command-slip-icon">
@@ -234,7 +234,7 @@ export default function InventoryCountPage() {
                 Count Inventory
               </div>
               <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory Count</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
                 Loading inventory data...
               </p>
             </div>
@@ -306,7 +306,7 @@ export default function InventoryCountPage() {
       <div className="command-hero command-hero-inventory">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
               INVENTORY COUNT TOOL
             </p>
             <div className="mt-3 command-slip-icon">
@@ -314,21 +314,21 @@ export default function InventoryCountPage() {
               Count Inventory
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory Count</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
               Quickly enter physical counts and adjust stock levels after reconciling warehouse quantities.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <StatChip label="Visible lines" value={summary.totalRows} tone="cyan" />
+            <StatChip label="Visible lines" value={summary.totalRows} tone="slate" />
             <StatChip label="Changed" value={summary.changedRows} tone="amber" />
             <StatChip label="Net diff" value={summary.totalDifference} tone="slate" />
             <button
               type="button"
               onClick={resetCounts}
-              className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-left text-sm font-semibold text-slate-100 transition hover:bg-white/15"
+              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
             >
-              <span className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center gap-2 text-slate-700">
                 <RefreshCcw className="h-4 w-4" /> Reset counts
               </span>
             </button>
@@ -336,7 +336,7 @@ export default function InventoryCountPage() {
               type="button"
               onClick={saveChanges}
               disabled={summary.changedRows === 0}
-              className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Save updates
             </button>
@@ -440,7 +440,7 @@ export default function InventoryCountPage() {
                     <div
                       key={item.id}
                       className={`grid grid-cols-[160px_220px_160px_140px_120px_120px_120px_120px] border-t border-slate-200 transition hover:bg-slate-50 ${
-                        isChanged ? "bg-amber-50" : "bg-white"
+                        isChanged ? "bg-amber-100" : "bg-white"
                       }`}
                     >
                       <div className="p-3 font-medium text-slate-950 overflow-hidden text-ellipsis whitespace-nowrap">{product?.category || "Misc"}</div>
@@ -464,7 +464,7 @@ export default function InventoryCountPage() {
                           type="checkbox"
                           checked={Boolean(countedIds[item.id])}
                           onChange={() => setCountedIds((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
-                          className="h-5 w-5 rounded border-violet-400 bg-violet-50 accent-violet-500 shadow-sm focus:ring-violet-400"
+                          className="h-5 w-5 rounded border-slate-300 bg-slate-50 accent-cyan-600 shadow-sm focus:ring-cyan-500"
                         />
                       </div>
                       <div className="p-3 whitespace-nowrap font-semibold text-slate-900">
@@ -479,22 +479,22 @@ export default function InventoryCountPage() {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          <div className="rounded-[2rem] border border-slate-900 bg-slate-950 p-6 text-white shadow-[0_24px_60px_rgba(8,15,24,0.24)]">
-            <p className="font-mono text-sm uppercase tracking-[0.24em] text-cyan-300/75">Inventory reconciliation</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">Count summary</h2>
+          <div className="glass-card p-6 text-slate-900">
+            <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Inventory reconciliation</p>
+            <h2 className="mt-2 text-xl font-semibold text-slate-950">Count summary</h2>
             <div className="mt-5 space-y-4">
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-400">Changed rows</p>
-                <p className="mt-2 text-3xl font-semibold text-white">{summary.changedRows}</p>
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-500">Changed rows</p>
+                <p className="mt-2 text-3xl font-semibold text-slate-950">{summary.changedRows}</p>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-400">Total variance</p>
-                <p className="mt-2 text-3xl font-semibold text-white">{summary.totalDifference >= 0 ? `+${summary.totalDifference}` : summary.totalDifference}</p>
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-500">Total variance</p>
+                <p className="mt-2 text-3xl font-semibold text-slate-950">{summary.totalDifference >= 0 ? `+${summary.totalDifference}` : summary.totalDifference}</p>
               </div>
             </div>
-            <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
-              <p className="font-semibold">How to use</p>
-              <ol className="mt-3 list-decimal space-y-2 pl-5 text-slate-300">
+            <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <p className="font-semibold text-slate-950">How to use</p>
+              <ol className="mt-3 list-decimal space-y-2 pl-5 text-slate-700">
                 <li>Search or filter to the rows you want to count.</li>
                 <li>Enter the physical quantity in the Counted column.</li>
                 <li>Check the box in the Counted? column when that item is verified.</li>
@@ -525,11 +525,11 @@ function StatChip({
   tone: "cyan" | "slate" | "amber" | "rose" | "sky";
 }) {
   const toneClass = {
-    cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100",
-    slate: "border-white/15 bg-white/8 text-white",
-    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
-    rose: "border-rose-300/25 bg-rose-300/10 text-rose-50",
-    sky: "border-sky-300/25 bg-sky-300/10 text-sky-50",
+    cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-950",
+    slate: "border-slate-200 bg-slate-100 text-slate-950",
+    amber: "border-amber-300/40 bg-amber-100 text-amber-950",
+    rose: "border-rose-300/25 bg-rose-100 text-rose-950",
+    sky: "border-sky-300/25 bg-sky-100 text-slate-950",
   }[tone];
 
   return (

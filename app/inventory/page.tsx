@@ -397,7 +397,7 @@ export default function InventoryPage() {
       <div className="command-hero command-hero-inventory">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-cyan-200/80">
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
               STOCK CONTROL GRID
             </p>
             <div className="mt-3 command-slip-icon">
@@ -405,7 +405,7 @@ export default function InventoryPage() {
               Inventory
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory Command</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/78 sm:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
               Live warehouse stock view with fast filtering, line-by-line status, and direct restock controls.
             </p>
           </div>
@@ -483,7 +483,7 @@ export default function InventoryPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search products..."
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-400"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-300"
               />
             </div>
           </div>
@@ -539,7 +539,7 @@ export default function InventoryPage() {
                       role="row"
                       key={rowKey}
                       onClick={() => setSelected(item)}
-                      className={`grid cursor-pointer grid-cols-[140px_200px_140px_140px_120px_220px_120px_150px_160px_150px_160px] border-t border-slate-200 transition hover:bg-slate-50 ${selected?.id === item.id ? "bg-cyan-50/70" : ""}`}
+                      className={`grid cursor-pointer grid-cols-[140px_200px_140px_140px_120px_220px_120px_150px_160px_150px_160px] border-t border-slate-200 transition hover:bg-slate-50 ${selected?.id === item.id ? "bg-slate-100" : "bg-white"}`}
                     >
                       <div role="cell" className="p-3 font-medium text-slate-950 overflow-hidden text-ellipsis whitespace-nowrap">{product?.category || "-"}</div>
                       <div role="cell" className="p-3 font-medium text-slate-950 overflow-hidden text-ellipsis whitespace-nowrap">
@@ -683,7 +683,7 @@ export default function InventoryPage() {
                     />
                     <button
                       onClick={() => restock(selected.id, Number(restockAmount))}
-                      className="rounded-2xl bg-cyan-400 px-4 py-2 font-semibold text-slate-950 transition hover:bg-cyan-300"
+                      className="rounded-2xl bg-slate-950 px-4 py-2 font-semibold text-white transition hover:bg-slate-800"
                     >
                       Restock
                     </button>
@@ -720,23 +720,23 @@ function StatChip({
   onClick?: () => void;
 }) {
   const toneClass = {
-    cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100",
-    slate: "border-white/15 bg-white/8 text-white",
-    amber: "border-amber-300/40 bg-amber-400/20 text-amber-100",
-    rose: "border-rose-300/25 bg-rose-300/10 text-rose-50",
-    sky: "border-sky-300/25 bg-sky-300/10 text-sky-50",
+    cyan: "border-cyan-200/80 bg-cyan-100 text-slate-950",
+    slate: "border-slate-200/80 bg-slate-100 text-slate-950",
+    amber: "border-amber-200/80 bg-amber-100 text-slate-950",
+    rose: "border-rose-200/80 bg-rose-100 text-slate-950",
+    sky: "border-sky-200/80 bg-sky-100 text-slate-950",
   }[tone];
 
-  const activeClass = isActive ? "ring-2 ring-white/70 ring-offset-2 ring-offset-slate-900" : "";
+  const activeClass = isActive ? "ring-1 ring-slate-900/10" : "";
 
   if (onClick) {
     return (
       <button
         type="button"
         onClick={onClick}
-        className={`rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:bg-white/15 ${toneClass} ${activeClass}`}
+        className={`rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:bg-white/90 ${toneClass} ${activeClass}`}
       >
-        <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] opacity-80">{label}</p>
+        <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] text-slate-600">{label}</p>
         <p className="mt-2 text-2xl font-semibold">{value}</p>
       </button>
     );

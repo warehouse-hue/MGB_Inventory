@@ -911,7 +911,7 @@ export default function Page() {
           <div>
             <p
               onClick={armHiddenWipe}
-              className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-300/80 cursor-default select-none"
+              className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500 cursor-default select-none"
             >
               SYSTEM CONFIG
             </p>
@@ -920,7 +920,7 @@ export default function Page() {
               Settings
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Settings Command</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200/78 sm:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
               Configuration surface for sync, workspace behavior, and future warehouse controls.
             </p>
           </div>
@@ -1272,11 +1272,11 @@ function SettingsChip({
   tone: "emerald" | "amber" | "slate" | "cyan" | "rose";
 }) {
   const toneClass = {
-    emerald: "border-emerald-200/70 bg-emerald-400/35 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
-    amber: "border-amber-200/70 bg-amber-400/35 text-amber-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
-    slate: "border-slate-200/45 bg-slate-200/20 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]",
-    cyan: "border-cyan-200/70 bg-cyan-400/35 text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
-    rose: "border-rose-200/70 bg-rose-400/35 text-rose-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]",
+    emerald: "border-emerald-200/80 bg-emerald-100 text-slate-950",
+    amber: "border-amber-200/80 bg-amber-100 text-slate-950",
+    slate: "border-slate-200/80 bg-slate-100 text-slate-950",
+    cyan: "border-cyan-200/80 bg-cyan-100 text-slate-950",
+    rose: "border-rose-200/80 bg-rose-100 text-slate-950",
   }[tone];
 
   return (
