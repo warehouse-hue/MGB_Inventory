@@ -21,6 +21,58 @@ function normalizeText(value: string | undefined) {
   return (value || "").trim().toLowerCase();
 }
 
+type InventoryCountDraft = {
+  countInputs: Record<number, string>;
+  countedIds: Record<number, boolean>;
+  search: string;
+  sizeGaugeSearch: string;
+  activeCategory: string;
+};
+
+const INVENTORY_COUNT_DRAFT_KEY = "inventory-count-draft";
+
+function loadDraft(): InventoryCountDraft | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const stored = window.sessionStorage.getItem(INVENTORY_COUNT_DRAFT_KEY);
+    if (!stored) {
+      return null;
+    }
+
+    const parsed = JSON.parse(stored) as InventoryCountDraft;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(draft: InventoryCountDraft) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(INVENTORY_COUNT_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function clearDraft() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(INVENTORY_COUNT_DRAFT_KEY);
+  } catch {
+    // ignore storage errors
+  }
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -57,6 +109,7 @@ export default function InventoryCountPage() {
   const [sizeGaugeSearch, setSizeGaugeSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [countInputs, setCountInputs] = useState<Record<number, string>>({});
+  const [countedIds, setCountedIds] = useState<Record<number, boolean>>({});
   const [saveMessage, setSaveMessage] = useState("");
   const [hydrated, setHydrated] = useState(false);
 
@@ -64,12 +117,38 @@ export default function InventoryCountPage() {
   useEffect(() => {
     const inventory = getInventory();
     const products = getProducts();
+    const draft = loadDraft();
+
     setItems(inventory);
     setProducts(products);
-    setCountInputs(Object.fromEntries(inventory.map((item) => [item.id, String(safeNumber(item.stock))])));
+    setSearch(draft?.search ?? "");
+    setSizeGaugeSearch(draft?.sizeGaugeSearch ?? "");
+    setActiveCategory(draft?.activeCategory ?? "All");
+    setCountInputs(
+      draft?.countInputs ??
+        Object.fromEntries(inventory.map((item) => [item.id, String(safeNumber(item.stock))]))
+    );
+    setCountedIds(
+      draft?.countedIds ??
+        Object.fromEntries(inventory.map((item) => [item.id, false]))
+    );
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+
+    saveDraft({
+      countInputs,
+      countedIds,
+      search,
+      sizeGaugeSearch,
+      activeCategory,
+    });
+  }, [countInputs, countedIds, search, sizeGaugeSearch, activeCategory, hydrated]);
 
   const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
@@ -127,6 +206,8 @@ export default function InventoryCountPage() {
       return safeNumber(inputValue) !== safeNumber(item.stock);
     });
 
+    const countedRows = filteredItems.filter((item) => countedIds[item.id]).length;
+
     const totalDifference = changedRows.reduce((acc, item) => {
       return acc + (safeNumber(countInputs[item.id]) - safeNumber(item.stock));
     }, 0);
@@ -134,9 +215,10 @@ export default function InventoryCountPage() {
     return {
       totalRows: filteredItems.length,
       changedRows: changedRows.length,
+      countedRows,
       totalDifference,
     };
-  }, [filteredItems, countInputs]);
+  }, [filteredItems, countInputs, countedIds]);
 
   if (!hydrated) {
     return (
@@ -171,6 +253,7 @@ export default function InventoryCountPage() {
 
   const resetCounts = () => {
     setCountInputs(Object.fromEntries(items.map((item) => [item.id, String(safeNumber(item.stock))])));
+    setCountedIds(Object.fromEntries(items.map((item) => [item.id, false])));
     setSaveMessage("");
   };
 
@@ -213,6 +296,8 @@ export default function InventoryCountPage() {
 
     saveInventory(updatedInventory);
     setItems(updatedInventory);
+    setCountedIds(Object.fromEntries(updatedInventory.map((item) => [item.id, false])));
+    clearDraft();
     setSaveMessage(`${changes.length} inventory count ${changes.length === 1 ? "update" : "updates"} saved.`);
   };
 
@@ -337,8 +422,8 @@ export default function InventoryCountPage() {
                 <div className="p-3 text-left whitespace-nowrap">Size / Gauge</div>
                 <div className="p-3 text-left whitespace-nowrap">Current</div>
                 <div className="p-3 text-left whitespace-nowrap">Counted</div>
+                <div className="p-3 text-left whitespace-nowrap">Counted?</div>
                 <div className="p-3 text-left whitespace-nowrap">Difference</div>
-                <div className="p-3 text-left whitespace-nowrap">Location</div>
               </div>
 
               <div role="rowgroup" style={{ overflowAnchor: "none" }}>
@@ -374,10 +459,17 @@ export default function InventoryCountPage() {
                           className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-sky-400"
                         />
                       </div>
+                      <div className="p-3 flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(countedIds[item.id])}
+                          onChange={() => setCountedIds((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
+                          className="h-5 w-5 rounded border-violet-400 bg-violet-50 accent-violet-500 shadow-sm focus:ring-violet-400"
+                        />
+                      </div>
                       <div className="p-3 whitespace-nowrap font-semibold text-slate-900">
                         <span className={isChanged ? "text-rose-600" : "text-slate-500"}>{differenceLabel}</span>
                       </div>
-                      <div className="p-3 text-slate-600 whitespace-nowrap overflow-hidden text-ellipsis">{item.location || "-"}</div>
                     </div>
                   );
                 })}
@@ -405,6 +497,7 @@ export default function InventoryCountPage() {
               <ol className="mt-3 list-decimal space-y-2 pl-5 text-slate-300">
                 <li>Search or filter to the rows you want to count.</li>
                 <li>Enter the physical quantity in the Counted column.</li>
+                <li>Check the box in the Counted? column when that item is verified.</li>
                 <li>Press Save updates to apply new stock levels.</li>
               </ol>
             </div>
