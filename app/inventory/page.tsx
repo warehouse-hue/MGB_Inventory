@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Boxes } from "lucide-react";
 import {
   getAppSettings,
@@ -48,6 +48,20 @@ export default function InventoryPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selected, setSelected] = useState<InventoryItem | null>(null);
   const [restockAmount, setRestockAmount] = useState("");
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [barcodeQuantity, setBarcodeQuantity] = useState("1");
+  const [barcodeAction, setBarcodeAction] = useState<"ADD" | "REMOVE">("ADD");
+  const [barcodeMessage, setBarcodeMessage] = useState("");
+  const [scannerActive, setScannerActive] = useState(false);
+  const [scannerSupported, setScannerSupported] = useState(false);
+  const [scanStatus, setScanStatus] = useState("");
+  const [scanError, setScanError] = useState("");
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const barcodeDetectorRef = useRef<any>(null);
+  const scanFrameRef = useRef<number | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+
   const categoryTabs = [
     "All",
     "Drum Skins",
@@ -287,6 +301,181 @@ export default function InventoryPage() {
     }
   };
 
+  const findProductByBarcode = (barcode: string) => {
+    const normalizedBarcode = barcode.trim().toLowerCase();
+    if (!normalizedBarcode) return undefined;
+
+    return products.find((product) => {
+      const codeValues = [product.productCode, product.sku];
+      return codeValues.some((value) => (value || "").trim().toLowerCase() === normalizedBarcode);
+    });
+  };
+
+  const stopScanner = () => {
+    if (scanFrameRef.current) {
+      cancelAnimationFrame(scanFrameRef.current);
+      scanFrameRef.current = null;
+    }
+
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+    }
+
+    setScannerActive(false);
+  };
+
+  const scanFrame = async () => {
+    if (!videoRef.current || !barcodeDetectorRef.current) {
+      return;
+    }
+
+    try {
+      const video = videoRef.current;
+      if (video.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
+        scanFrameRef.current = requestAnimationFrame(scanFrame);
+        return;
+      }
+
+      const barcodes = await barcodeDetectorRef.current.detect(video);
+      if (barcodes.length > 0) {
+        const rawValue = barcodes[0].rawValue;
+        if (rawValue) {
+          setBarcodeInput(rawValue);
+          setScanStatus(`Detected barcode: ${rawValue}`);
+          setBarcodeMessage("");
+          stopScanner();
+          return;
+        }
+      }
+    } catch (error) {
+      setScanError("Barcode detection failed. Please try again.");
+      stopScanner();
+      return;
+    }
+
+    scanFrameRef.current = requestAnimationFrame(scanFrame);
+  };
+
+  const startScanner = async () => {
+    setScanError("");
+    setScanStatus("");
+
+    const BarcodeDetectorAPI = (window as any).BarcodeDetector;
+    if (!BarcodeDetectorAPI || !navigator.mediaDevices?.getUserMedia) {
+      setScanError("Camera barcode scanning is not supported in this browser.");
+      setScannerSupported(false);
+      return;
+    }
+
+    try {
+      const supportedFormats = await BarcodeDetectorAPI.getSupportedFormats();
+      barcodeDetectorRef.current = new BarcodeDetectorAPI({
+        formats:
+          supportedFormats && supportedFormats.length > 0
+            ? supportedFormats
+            : ["ean_13", "ean_8", "upc_e", "code_39", "code_128", "qr_code"],
+      });
+
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      cameraStreamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {
+          /* ignore play errors */
+        });
+      }
+
+      setScannerActive(true);
+      requestAnimationFrame(scanFrame);
+    } catch (error) {
+      setScanError("Unable to access the camera. Please allow permission or try another device.");
+      setScannerActive(false);
+    }
+  };
+
+  useEffect(() => {
+    setScannerSupported(Boolean((window as any).BarcodeDetector && navigator.mediaDevices?.getUserMedia));
+    return () => {
+      stopScanner();
+    };
+  }, []);
+
+  const handleBarcodeQuickEntry = () => {
+    const barcode = barcodeInput.trim();
+    const quantity = Number(barcodeQuantity);
+
+    if (!barcode) {
+      setBarcodeMessage("Please enter a barcode or SKU.");
+      return;
+    }
+
+    if (!quantity || quantity < 1) {
+      setBarcodeMessage("Quantity must be at least 1.");
+      return;
+    }
+
+    const product = findProductByBarcode(barcode);
+    if (!product) {
+      setBarcodeMessage("No product found for that barcode.");
+      return;
+    }
+
+    const existingItem = items.find((item) => item.productId === product.id);
+    let updatedItems: InventoryItem[];
+    let updatedItem: InventoryItem;
+    let previousStock = 0;
+    let newStock = quantity;
+
+    if (!existingItem) {
+      if (barcodeAction === "REMOVE") {
+        setBarcodeMessage("No inventory item exists to remove stock from for this barcode.");
+        return;
+      }
+
+      updatedItem = {
+        id: generateId(),
+        productId: product.id,
+        variant: product.sizeGauge || "",
+        stock: quantity,
+        location: getAppSettings().defaultLocation,
+      };
+      updatedItems = [updatedItem, ...items];
+      setBarcodeMessage(`Created new inventory line for ${product.model || product.name} with ${quantity} unit(s).`);
+    } else {
+      previousStock = existingItem.stock;
+      newStock = Math.max(0, existingItem.stock + (barcodeAction === "ADD" ? quantity : -quantity));
+      updatedItem = { ...existingItem, stock: newStock };
+      updatedItems = items.map((item) => (item.id === existingItem.id ? updatedItem : item));
+      const actionLabel = barcodeAction === "ADD" ? "Added" : "Removed";
+      setBarcodeMessage(`${actionLabel} ${quantity} unit(s) for ${product.model || product.name}. New stock: ${newStock}.`);
+    }
+
+    saveInventory(updatedItems);
+    setItems(getInventory());
+    setSelected(updatedItem);
+
+    addTransaction({
+      id: generateId(),
+      inventoryItemId: updatedItem.id,
+      productId: product.id,
+      productName: product.name || "",
+      variant: updatedItem.variant,
+      type: barcodeAction === "ADD" ? "RESTOCK" : "REMOVE",
+      quantity,
+      previousStock,
+      newStock: updatedItem.stock,
+      date: Date.now(),
+    });
+
+    addActivity(
+      `${barcodeAction === "ADD" ? "Restocked" : "Removed"} ${quantity} unit(s) for ${product.model || product.name}.`
+    );
+
+    setBarcodeInput("");
+    setBarcodeQuantity("1");
+  };
+
   /* UPDATE STOCK */
   const updateStock = (id: number, delta: number) => {
     let transactionToAdd: any = null;
@@ -486,6 +675,118 @@ export default function InventoryPage() {
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-300"
               />
             </div>
+          </div>
+
+          <div className="glass-card p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
+                  Barcode quick entry
+                </p>
+                <h2 className="text-xl font-semibold text-slate-950 mt-2">
+                  Add or remove stock by barcode
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Scan or type a barcode/SKU, choose an action, and update inventory instantly.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-[1.6fr_0.8fr_0.8fr]">
+                <input
+                  value={barcodeInput}
+                  onChange={(e) => setBarcodeInput(e.target.value)}
+                  placeholder="Scan or enter barcode / SKU"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-300"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  value={barcodeQuantity}
+                  onChange={(e) => setBarcodeQuantity(e.target.value)}
+                  placeholder="Qty"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-300"
+                />
+                <div className="grid gap-2">
+                  <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setBarcodeAction("ADD")}
+                      className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                        barcodeAction === "ADD"
+                          ? "bg-slate-950 text-white"
+                          : "text-slate-700 hover:bg-white"
+                      }`}
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBarcodeAction("REMOVE")}
+                      className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                        barcodeAction === "REMOVE"
+                          ? "bg-slate-950 text-white"
+                          : "text-slate-700 hover:bg-white"
+                      }`}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleBarcodeQuickEntry}
+                    className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr]">
+              <div className="grid gap-2">
+                <button
+                  type="button"
+                  onClick={scannerActive ? stopScanner : startScanner}
+                  className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  {scannerActive ? "Stop camera scan" : "Scan with camera"}
+                </button>
+                {scannerSupported ? (
+                  <p className="text-sm text-slate-500">
+                    Use your device camera to scan a barcode. If supported, the detected value will fill the barcode field.
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    Camera scan is only available in supported browsers with camera access.
+                  </p>
+                )}
+                {scanStatus ? (
+                  <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                    {scanStatus}
+                  </div>
+                ) : null}
+                {scanError ? (
+                  <div className="rounded-3xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                    {scanError}
+                  </div>
+                ) : null}
+              </div>
+              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950">
+                <video
+                  ref={videoRef}
+                  className="h-56 w-full object-cover"
+                  autoPlay
+                  muted
+                  playsInline
+                />
+              </div>
+            </div>
+
+            {barcodeMessage ? (
+              <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                {barcodeMessage}
+              </div>
+            ) : null}
           </div>
 
           <div className="glass-card overflow-x-auto">
