@@ -21,6 +21,22 @@ function normalizeText(value: string | undefined) {
   return (value || "").trim().toLowerCase();
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesSizeGaugeValue(field: string | undefined, searchValue: string) {
+  if (!field) {
+    return false;
+  }
+
+  const normalizedField = field.toLowerCase();
+  const escapedSearch = escapeRegExp(searchValue);
+  const regex = new RegExp(`(^|[^0-9.])${escapedSearch}([^0-9.]|$)`);
+
+  return regex.test(normalizedField);
+}
+
 const categoryTabs = [
   "All",
   "Drum Skins",
@@ -59,6 +75,7 @@ export default function InventoryCountPage() {
 
   const filteredItems = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
+    const normalizedSizeGaugeSearch = sizeGaugeSearch.trim().toLowerCase();
 
     return items
       .filter((item) => {
@@ -78,12 +95,10 @@ export default function InventoryCountPage() {
           .includes(normalizedSearch);
 
         const matchesSizeGauge =
-          !sizeGaugeSearch.trim() ||
+          !normalizedSizeGaugeSearch ||
           [product?.sizeGauge, item.variant]
             .filter(Boolean)
-            .join(" ")
-            .toLowerCase()
-            .includes(sizeGaugeSearch.trim().toLowerCase());
+            .some((field) => matchesSizeGaugeValue(field, normalizedSizeGaugeSearch));
 
         const matchesCategory =
           activeCategory === "All" || (product?.category || "Misc") === activeCategory;
@@ -274,7 +289,7 @@ export default function InventoryCountPage() {
                   <input
                     value={sizeGaugeSearch}
                     onChange={(e) => setSizeGaugeSearch(e.target.value)}
-                    placeholder="Size / gauge"
+                    placeholder='Size / gauge (try 8" for exact size)'
                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-400"
                   />
                 </div>
