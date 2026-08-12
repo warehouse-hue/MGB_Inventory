@@ -9,12 +9,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
       <body className="min-h-screen text-slate-900 antialiased">
         <div className="min-h-screen flex flex-col lg:flex-row">
 
           {/* SIDEBAR */}
-          <aside className="w-full bg-slate-950 p-6 lg:w-80 lg:min-h-screen">
-            <div className="mb-6 p-5 lg:mb-8">
+          <aside className="w-full bg-slate-950 p-4 lg:w-80 lg:min-h-screen">
+            <div className="mb-5 p-4 lg:mb-8 lg:p-5">
               <p className="mb-2 text-[1.08rem] font-medium uppercase tracking-[0.34em] text-slate-400">
                 R.P.O.S
               </p>
@@ -34,8 +37,8 @@ export default function RootLayout({
 
           {/* MAIN AREA */}
           <main className="flex-1 bg-slate-950/95 p-4 sm:p-6 xl:px-10">
-            <div className="mx-auto min-h-screen max-w-[1600px]">
-              <div className="overflow-hidden rounded-[40px] border border-slate-200/10 bg-white shadow-[0_40px_120px_rgba(15,23,42,0.14)]">
+            <div className="mx-auto min-h-screen max-w-[1600px] px-0 sm:px-2">
+              <div className="overflow-visible sm:overflow-hidden rounded-[30px] border border-slate-200/10 bg-white shadow-[0_40px_120px_rgba(15,23,42,0.14)]">
                 <AppBootstrap>{children}</AppBootstrap>
               </div>
             </div>

@@ -21,6 +21,13 @@ import {
 
 import { addTransaction } from "../lib/transactions";
 
+declare global {
+  interface Window {
+    Quagga?: any;
+    BarcodeDetector?: any;
+  }
+}
+
 function safeNumber(value: any) {
   const n = Number(value);
   return isNaN(n) ? 0 : n;
@@ -54,10 +61,12 @@ export default function InventoryPage() {
   const [barcodeMessage, setBarcodeMessage] = useState("");
   const [scannerActive, setScannerActive] = useState(false);
   const [scannerSupported, setScannerSupported] = useState(false);
+  const [scannerFallback, setScannerFallback] = useState(false);
   const [scanStatus, setScanStatus] = useState("");
   const [scanError, setScanError] = useState("");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const barcodeDetectorRef = useRef<any>(null);
   const scanFrameRef = useRef<number | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -311,10 +320,33 @@ export default function InventoryPage() {
     });
   };
 
+  const loadScript = (src: string) =>
+    new Promise<void>((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) {
+        resolve();
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load ${src}`));
+      document.body.appendChild(script);
+    });
+
   const stopScanner = () => {
     if (scanFrameRef.current) {
       cancelAnimationFrame(scanFrameRef.current);
       scanFrameRef.current = null;
+    }
+
+    if (window.Quagga && scannerFallback) {
+      try {
+        window.Quagga.stop();
+      } catch {
+        /* ignore */
+      }
     }
 
     if (cameraStreamRef.current) {
@@ -323,10 +355,11 @@ export default function InventoryPage() {
     }
 
     setScannerActive(false);
+    setScannerFallback(false);
   };
 
   const scanFrame = async () => {
-    if (!videoRef.current || !barcodeDetectorRef.current) {
+    if (!videoRef.current || !barcodeDetectorRef.current || scannerFallback) {
       return;
     }
 
@@ -361,41 +394,116 @@ export default function InventoryPage() {
     setScanError("");
     setScanStatus("");
 
-    const BarcodeDetectorAPI = (window as any).BarcodeDetector;
-    if (!BarcodeDetectorAPI || !navigator.mediaDevices?.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia) {
       setScanError("Camera barcode scanning is not supported in this browser.");
       setScannerSupported(false);
       return;
     }
 
-    try {
-      const supportedFormats = await BarcodeDetectorAPI.getSupportedFormats();
-      barcodeDetectorRef.current = new BarcodeDetectorAPI({
-        formats:
-          supportedFormats && supportedFormats.length > 0
-            ? supportedFormats
-            : ["ean_13", "ean_8", "upc_e", "code_39", "code_128", "qr_code"],
-      });
-
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      cameraStreamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {
-          /* ignore play errors */
+    const BarcodeDetectorAPI = (window as any).BarcodeDetector;
+    if (BarcodeDetectorAPI) {
+      try {
+        const supportedFormats = await BarcodeDetectorAPI.getSupportedFormats();
+        barcodeDetectorRef.current = new BarcodeDetectorAPI({
+          formats:
+            supportedFormats && supportedFormats.length > 0
+              ? supportedFormats
+              : ["ean_13", "ean_8", "upc_e", "code_39", "code_128", "qr_code"],
         });
+
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        cameraStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {
+            /* ignore play errors */
+          });
+        }
+
+        setScannerActive(true);
+        setScannerFallback(false);
+        requestAnimationFrame(scanFrame);
+        return;
+      } catch (error) {
+        setScanError("Unable to access the camera. Please allow permission or try another device.");
+        setScannerActive(false);
+        return;
+      }
+    }
+
+    const quaggaSrc = "https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js";
+    try {
+      await loadScript(quaggaSrc);
+      if (!window.Quagga) {
+        throw new Error("Quagga failed to load.");
       }
 
+      const target = previewContainerRef.current;
+      if (!target) {
+        throw new Error("Scanner preview container not found.");
+      }
+
+      setScannerFallback(true);
       setScannerActive(true);
-      requestAnimationFrame(scanFrame);
+
+      window.Quagga.init(
+        {
+          inputStream: {
+            name: "Live",
+            type: "LiveStream",
+            target,
+            constraints: {
+              facingMode: "environment",
+              width: { min: 640 },
+              height: { min: 480 },
+            },
+          },
+          locator: {
+            patchSize: "medium",
+            halfSample: true,
+          },
+          decoder: {
+            readers: [
+              "code_128_reader",
+              "ean_reader",
+              "ean_13_reader",
+              "upc_reader",
+              "upc_e_reader",
+              "code_39_reader",
+            ],
+          },
+          locate: true,
+        },
+        (err: any) => {
+          if (err) {
+            setScanError("Camera scanning failed to start on this browser.");
+            setScannerActive(false);
+            setScannerFallback(false);
+            return;
+          }
+
+          window.Quagga.start();
+        }
+      );
+
+      window.Quagga.onDetected((result: any) => {
+        const code = result?.codeResult?.code;
+        if (code) {
+          setBarcodeInput(code);
+          setScanStatus(`Detected barcode: ${code}`);
+          setBarcodeMessage("");
+          stopScanner();
+        }
+      });
     } catch (error) {
-      setScanError("Unable to access the camera. Please allow permission or try another device.");
+      setScanError("Barcode scanning is not supported in this browser.");
       setScannerActive(false);
+      setScannerFallback(false);
     }
   };
 
   useEffect(() => {
-    setScannerSupported(Boolean((window as any).BarcodeDetector && navigator.mediaDevices?.getUserMedia));
+    setScannerSupported(Boolean(navigator.mediaDevices?.getUserMedia));
     return () => {
       stopScanner();
     };
@@ -771,7 +879,10 @@ export default function InventoryPage() {
                   </div>
                 ) : null}
               </div>
-              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950">
+              <div
+                ref={previewContainerRef}
+                className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 h-56"
+              >
                 <video
                   ref={videoRef}
                   className="h-56 w-full object-cover"
@@ -790,7 +901,7 @@ export default function InventoryPage() {
           </div>
 
           <div className="glass-card overflow-x-auto">
-            <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-mono text-xs uppercase tracking-[0.28em] text-slate-500">
                   Live stock table
@@ -811,7 +922,7 @@ export default function InventoryPage() {
                 Click any row for stock controls
               </div>
             </div>
-            <div role="table" aria-label="Inventory table" className="min-w-[1580px] w-full text-sm text-slate-700">
+              <div role="table" aria-label="Inventory table" className="min-w-full md:min-w-[1580px] w-full text-sm text-slate-700">
               <div
                 role="row"
                 className="grid grid-cols-[140px_200px_140px_140px_120px_220px_120px_150px_160px_150px_160px] bg-slate-100 text-slate-600"
