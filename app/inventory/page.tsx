@@ -922,7 +922,7 @@ export default function InventoryPage() {
                 Click any row for stock controls
               </div>
             </div>
-              <div role="table" aria-label="Inventory table" className="min-w-full md:min-w-[1580px] w-full text-sm text-slate-700">
+              <div role="table" aria-label="Inventory table" className="min-w-[1580px] w-full text-sm text-slate-700">
               <div
                 role="row"
                 className="grid grid-cols-[140px_200px_140px_140px_120px_220px_120px_150px_160px_150px_160px] bg-slate-100 text-slate-600"

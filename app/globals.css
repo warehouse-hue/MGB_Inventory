@@ -162,7 +162,6 @@ th {
   .glass-card {
     @apply rounded-3xl border bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)];
     border-color: rgba(148, 163, 184, 0.16);
-    word-break: break-word;
   }
 
   .metric-card {
@@ -320,22 +319,5 @@ th {
     display: grid;
     gap: 0.5rem;
     border-color: rgba(148, 163, 184, 0.14);
-  }
-
-  .nav-link {
-    @apply px-3 py-3;
-  }
-
-  .nav-link > span {
-    gap: 0.65rem;
-  }
-
-  .nav-link-chevron {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  .nav-group-title {
-    font-size: 0.72rem;
   }
 }
