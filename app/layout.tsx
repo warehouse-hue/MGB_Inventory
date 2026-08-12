@@ -37,7 +37,7 @@ export default function RootLayout({
 
           {/* MAIN AREA */}
           <main className="flex-1 bg-slate-950/95 p-4 sm:p-6 xl:px-10">
-            <div className="mx-auto min-h-screen max-w-[1600px] px-0 sm:px-2">
+            <div className="mx-auto min-h-screen max-w-[1600px] px-0 sm:px-2 overflow-x-auto">
               <div className="overflow-visible sm:overflow-hidden rounded-[30px] border border-slate-200/10 bg-white shadow-[0_40px_120px_rgba(15,23,42,0.14)]">
                 <AppBootstrap>{children}</AppBootstrap>
               </div>
