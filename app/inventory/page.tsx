@@ -118,10 +118,6 @@ export default function InventoryPage() {
   const adjustingItem = items.find((item) => item.id === adjustingItemId) ?? null;
   const adjustingProduct = adjustingItem ? productsById.get(adjustingItem.productId) : undefined;
   const filtersActive = Boolean(search || activeCategory !== "All" || activeStatus !== "ALL");
-  const hasUnsavedAdjustment = Boolean(
-    customChange || (adjustingItem && exactQuantity !== String(safeNumber(adjustingItem.stock)))
-  );
-
   useEffect(() => {
     if (!adjustingItemId) return;
 
@@ -274,7 +270,8 @@ export default function InventoryPage() {
                 const product = productsById.get(item.productId);
                 const status = getStatus(item);
                 return (
-                  <div key={item.id} role="row" className="grid grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,1fr)_80px_120px_180px] items-center gap-3 border-t border-slate-200 px-4 transition hover:bg-slate-50">
+                  <div key={item.id}>
+                  <div role="row" className="grid grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,1fr)_80px_120px_180px] items-center gap-3 border-t border-slate-200 px-4 transition hover:bg-slate-50">
                     <div role="cell" className="min-w-0 py-3">
                       <p className="truncate font-medium text-slate-950">{productLabel(product)}</p>
                       <p className="truncate text-xs text-slate-500">{[product?.brandUses, product?.productCode || product?.sku].filter(Boolean).join(" · ") || "-"}</p>
@@ -288,6 +285,33 @@ export default function InventoryPage() {
                       <button type="button" aria-label={`Add one to ${productLabel(product)}`} disabled={isUpdating} onClick={() => applyChange(item.id, 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700"><Plus className="h-4 w-4" /></button>
                       <button type="button" aria-label={`Adjust ${productLabel(product)} stock`} onClick={() => openAdjustment(item)} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700"><SlidersHorizontal className="h-4 w-4" /></button>
                     </div>
+                  </div>
+                  {adjustingItemId === item.id ? (
+                    <section role="dialog" aria-labelledby="adjust-stock-title" className="border-t border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="mx-auto max-w-2xl">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p id="adjust-stock-title" className="text-sm font-medium text-slate-950">Adjust stock</p>
+                            <p className="mt-1 text-sm text-slate-600">{productLabel(product)}{product?.sizeGauge || item.variant ? ` · ${product?.sizeGauge || item.variant}` : ""} · Current: {safeNumber(item.stock)}</p>
+                          </div>
+                          <button type="button" onClick={() => setAdjustingItemId(null)} aria-label="Close adjustment" className="text-slate-600"><X className="h-5 w-5" /></button>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {[-10, -5, -1, 1, 5, 10].map((amount) => (
+                            <button key={amount} type="button" disabled={isUpdating || safeNumber(item.stock) + amount < 0} onClick={() => applyChange(item.id, amount)} className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40">{amount > 0 ? `+${amount}` : amount}</button>
+                          ))}
+                        </div>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <label className="text-sm text-slate-600">Change by<input value={customChange} onChange={(event) => setCustomChange(event.target.value)} type="number" placeholder="e.g. -12 or +25" className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900" /></label>
+                          <label className="text-sm text-slate-600">Set quantity<input value={exactQuantity} onChange={(event) => setExactQuantity(event.target.value)} type="number" min="0" className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900" /></label>
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <button type="button" disabled={isUpdating || !customChange || safeNumber(item.stock) + safeNumber(customChange) < 0} onClick={submitCustomChange} className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40">Apply change</button>
+                          <button type="button" disabled={isUpdating || exactQuantity === "" || safeNumber(exactQuantity) < 0} onClick={submitExactQuantity} className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Set quantity</button>
+                        </div>
+                      </div>
+                    </section>
+                  ) : null}
                   </div>
                 );
               })}
@@ -303,43 +327,6 @@ export default function InventoryPage() {
         ) : null}
       </section>
 
-      {adjustingItem ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
-          onMouseDown={() => {
-            if (!hasUnsavedAdjustment) setAdjustingItemId(null);
-          }}
-        >
-        <section
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="adjust-stock-title"
-          className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg border border-slate-200 bg-white p-5 shadow-lg"
-          onMouseDown={(event) => event.stopPropagation()}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p id="adjust-stock-title" className="text-sm font-medium text-slate-950">Adjust stock</p>
-              <p className="mt-1 text-sm text-slate-600">{productLabel(adjustingProduct)} · Current: {safeNumber(adjustingItem.stock)}</p>
-            </div>
-            <button type="button" onClick={() => setAdjustingItemId(null)} aria-label="Close adjustment" className="text-slate-600"><X className="h-5 w-5" /></button>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {[-10, -5, -1, 1, 5, 10].map((amount) => (
-              <button key={amount} type="button" disabled={isUpdating || safeNumber(adjustingItem.stock) + amount < 0} onClick={() => applyChange(adjustingItem.id, amount)} className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40">{amount > 0 ? `+${amount}` : amount}</button>
-            ))}
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm text-slate-600">Change by<input value={customChange} onChange={(event) => setCustomChange(event.target.value)} type="number" placeholder="e.g. -12 or +25" className="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900" /></label>
-            <label className="text-sm text-slate-600">Set quantity<input value={exactQuantity} onChange={(event) => setExactQuantity(event.target.value)} type="number" min="0" className="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900" /></label>
-          </div>
-          <div className="mt-3 flex gap-2">
-            <button type="button" disabled={isUpdating || !customChange || safeNumber(adjustingItem.stock) + safeNumber(customChange) < 0} onClick={submitCustomChange} className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40">Apply change</button>
-            <button type="button" disabled={isUpdating || exactQuantity === "" || safeNumber(exactQuantity) < 0} onClick={submitExactQuantity} className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Set quantity</button>
-          </div>
-        </section>
-        </div>
-      ) : null}
     </div>
   );
 }
