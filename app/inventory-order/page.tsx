@@ -1,454 +1,231 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, X } from "lucide-react";
 import {
   addActivity,
+  generateId,
   getAppSettings,
   getInventory,
-  getProducts,
   getOrders,
+  getProducts,
   getSuppliers,
+  InventoryItem,
+  Product,
   resolveSupplierName,
   saveOrders,
   saveProducts,
-  generateId,
-  InventoryItem,
-  Product,
   Supplier,
 } from "../lib/storage";
 
-const ITEMS_PER_PAGE = 100;
+type StatusFilter = "ALL" | "OUT" | "LOW" | "ORDERED";
 
-function parseNumber(value: any) {
-  const number = Number(value);
-  return Number.isNaN(number) ? 0 : number;
+type AlertItem = {
+  product: Product;
+  stock: number;
+  minimum: number;
+  variant: string;
+  onOrderQuantity: number;
+};
+
+function safeNumber(value: unknown) {
+  const numberValue = Number(value);
+  return Number.isNaN(numberValue) ? 0 : numberValue;
 }
 
-function isLowStockByMode(stock: number, threshold: number, mode: "lt" | "lte") {
-  if (threshold <= 0 || stock <= 0) return false;
-  return mode === "lte" ? stock <= threshold : stock < threshold;
+function isLowStock(stock: number, minimum: number, mode: "lt" | "lte") {
+  if (minimum <= 0 || stock <= 0) return false;
+  return mode === "lte" ? stock <= minimum : stock < minimum;
+}
+
+function productLabel(product: Product) {
+  return product.model || product.name || product.brandUses || "Unnamed product";
 }
 
 export default function InventoryOrderPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [orders, setOrders] = useState<ReturnType<typeof getOrders>>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [category, setCategory] = useState("All");
+  const [status, setStatus] = useState<StatusFilter>("ALL");
+  const [ordering, setOrdering] = useState<AlertItem | null>(null);
+  const [orderQuantity, setOrderQuantity] = useState("");
 
   const refreshFromStorage = () => {
     setProducts(getProducts());
     setInventory(getInventory());
+    setOrders(getOrders());
     setSuppliers(getSuppliers());
   };
 
   useEffect(() => {
     refreshFromStorage();
-
-    const handleStorageUpdate = () => {
-      refreshFromStorage();
-    };
-
-    const handleFocus = () => {
-      refreshFromStorage();
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        refreshFromStorage();
-      }
-    };
-
-    window.addEventListener("mgb-storage-updated", handleStorageUpdate as EventListener);
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
+    window.addEventListener("mgb-storage-updated", refreshFromStorage as EventListener);
+    window.addEventListener("focus", refreshFromStorage);
     return () => {
-      window.removeEventListener("mgb-storage-updated", handleStorageUpdate as EventListener);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("mgb-storage-updated", refreshFromStorage as EventListener);
+      window.removeEventListener("focus", refreshFromStorage);
     };
   }, []);
 
-  const setOrderedFlag = (productId: number, ordered: boolean) => {
-    const targetProduct = products.find((product) => product.id === productId);
-    const updatedProducts = products.map((product) =>
-      product.id === productId
-        ? {
-            ...product,
-            ordered,
-            orderedDate: ordered
-              ? product.orderedDate || new Date().toISOString().slice(0, 10)
-              : "",
-          }
-        : product
-    );
+  const categories = useMemo(
+    () => ["All", ...Array.from(new Set(products.map((product) => product.category).filter(Boolean))).sort()],
+    [products]
+  );
 
-    saveProducts(updatedProducts);
-    setProducts(updatedProducts);
-
-    if (targetProduct) {
-      addActivity(
-        `${ordered ? "Marked ordered" : "Cleared ordered"} for ${
-          targetProduct.model || targetProduct.brandUses || targetProduct.name
-        } in Low/Out of Stock`
-      );
-    }
-
-    return updatedProducts.find((product) => product.id === productId);
-  };
-
-  const syncOrderForProduct = (product: Product | undefined) => {
-    if (!product) return;
-
-    const currentOrders = getOrders();
-    const existingOrder = currentOrders.find((order) => order.productId === product.id);
-
-    if (product.ordered) {
-      const order = {
-        id: existingOrder?.id ?? generateId(),
-        productId: product.id,
-        productName: product.model || product.brandUses || product.sku || product.name || "Product",
-        variant: product.sizeGauge || "",
-        quantity: product.orderQty ?? 0,
-        orderedDate: product.orderedDate || new Date().toISOString().slice(0, 10),
-        supplier: resolveSupplierName(product.supplier || "", suppliers),
-        lastBuyPrice: product.lastBuyPrice,
-        status: "OPEN" as const,
-      };
-
-      const updatedOrders = existingOrder
-        ? currentOrders.map((item) => (item.productId === product.id ? order : item))
-        : [order, ...currentOrders];
-
-      saveOrders(updatedOrders);
-    } else {
-      saveOrders(currentOrders.filter((item) => item.productId !== product.id));
-    }
-  };
-
-  const alertProducts = useMemo(() => {
+  const alertItems = useMemo(() => {
     const settings = getAppSettings();
-    const stockByProductId = new Map<number, number>();
-    const variantsByProductId = new Map<number, Set<string>>();
+    const stockByProduct = new Map<number, number>();
+    const variantsByProduct = new Map<number, Set<string>>();
+    const openOrdersByProduct = new Map<number, number>();
 
     for (const item of inventory) {
-      stockByProductId.set(item.productId, (stockByProductId.get(item.productId) ?? 0) + Number(item.stock || 0));
-
-      const variant = item.variant?.trim();
-      if (variant) {
-        if (!variantsByProductId.has(item.productId)) {
-          variantsByProductId.set(item.productId, new Set<string>());
-        }
-        variantsByProductId.get(item.productId)?.add(variant);
+      stockByProduct.set(item.productId, (stockByProduct.get(item.productId) ?? 0) + safeNumber(item.stock));
+      if (item.variant) {
+        const variants = variantsByProduct.get(item.productId) ?? new Set<string>();
+        variants.add(item.variant);
+        variantsByProduct.set(item.productId, variants);
       }
+    }
+    for (const order of orders) {
+      if (order.status === "OPEN") openOrdersByProduct.set(order.productId, (openOrdersByProduct.get(order.productId) ?? 0) + safeNumber(order.quantity));
     }
 
     return products
       .map((product) => {
-        const stock = stockByProductId.get(product.id) ?? 0;
-        const variantSummary = Array.from(variantsByProductId.get(product.id) ?? []).join(", ");
-
-        const threshold =
-          product.minimum != null
-            ? parseNumber(product.minimum)
-            : parseNumber(product.orderQty ?? 0);
-
-        const belowConfiguredThreshold = isLowStockByMode(stock, threshold, settings.lowStockMode);
-        const outOfStockAlert =
-          stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0);
-
+        const stock = stockByProduct.get(product.id) ?? 0;
+        const minimum = safeNumber(product.minimum);
+        const outOfStock = stock === 0 && (settings.includeNonStockedInAlerts || minimum > 0);
+        const lowStock = isLowStock(stock, minimum, settings.lowStockMode);
         return {
           product,
           stock,
-          variantSummary,
-          minimum: threshold > 0 ? threshold : undefined,
-          isAlert: belowConfiguredThreshold || outOfStockAlert,
+          minimum,
+          variant: product.sizeGauge || Array.from(variantsByProduct.get(product.id) ?? []).join(", "),
+          onOrderQuantity: openOrdersByProduct.get(product.id) ?? 0,
+          isAlert: outOfStock || lowStock,
         };
       })
       .filter((item) => item.isAlert)
-  }, [products, inventory]);
+      .sort((left, right) => {
+        const leftPriority = left.stock === 0 ? (left.onOrderQuantity ? 3 : 1) : (left.onOrderQuantity ? 4 : 2);
+        const rightPriority = right.stock === 0 ? (right.onOrderQuantity ? 3 : 1) : (right.onOrderQuantity ? 4 : 2);
+        if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+        return (right.minimum - right.stock) - (left.minimum - left.stock);
+      });
+  }, [inventory, orders, products]);
 
-  const lowStockProducts = useMemo(() => {
-    const normalizedSearch = search.toLowerCase().trim();
+  const filteredItems = useMemo(() => {
+    const queryTokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return alertItems.filter((item) => {
+      const fields = [item.product.name, item.product.brandUses, item.product.model, item.product.sizeGauge, item.product.category, item.product.productCode, item.product.sku, item.product.supplier]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const matchesStatus = status === "ALL" || (status === "OUT" && item.stock === 0) || (status === "LOW" && item.stock > 0) || (status === "ORDERED" && item.onOrderQuantity > 0);
+      return queryTokens.every((token) => fields.includes(token)) && (category === "All" || item.product.category === category) && matchesStatus;
+    });
+  }, [alertItems, category, search, status]);
 
-    return alertProducts
-      .filter((item) =>
-        !normalizedSearch ||
-        item.product.name.toLowerCase().includes(normalizedSearch) ||
-        item.product.brandUses?.toLowerCase().includes(normalizedSearch) ||
-        item.product.model?.toLowerCase().includes(normalizedSearch) ||
-        item.product.sizeGauge?.toLowerCase().includes(normalizedSearch) ||
-        item.variantSummary.toLowerCase().includes(normalizedSearch) ||
-        item.product.productCode?.toLowerCase().includes(normalizedSearch) ||
-        item.product.sku?.toLowerCase().includes(normalizedSearch)
-      );
-  }, [alertProducts, search]);
+  const summary = {
+    outOfStock: alertItems.filter((item) => item.stock === 0).length,
+    lowStock: alertItems.filter((item) => item.stock > 0).length,
+    onOrder: alertItems.filter((item) => item.onOrderQuantity > 0).length,
+  };
 
-  useEffect(() => {
-    const settings = getAppSettings();
-    if (!settings.autoCreateOrderSuggestion) {
+  const openOrderDialog = (item: AlertItem) => {
+    setOrdering(item);
+    setOrderQuantity(item.product.orderQty && item.product.orderQty > 0 ? String(item.product.orderQty) : "");
+  };
+
+  const addToOrder = () => {
+    if (!ordering) return;
+    const quantity = safeNumber(orderQuantity);
+    if (quantity <= 0) return;
+
+    const currentOrders = getOrders();
+    if (currentOrders.some((order) => order.productId === ordering.product.id && order.status === "OPEN")) {
+      setOrdering(null);
       return;
     }
 
-    const currentOrders = getOrders();
-    const existingOrderProductIds = new Set(currentOrders.map((order) => order.productId));
-    let updatedOrders = currentOrders;
-    let hasOrderChanges = false;
-    let hasProductChanges = false;
-
-    const updatedProducts = products.map((product) => {
-      const row = alertProducts.find((item) => item.product.id === product.id);
-      if (!row) {
-        return product;
-      }
-
-      const reorderQty = Math.max(1, Math.max(0, (row.minimum ?? 0) - row.stock) || parseNumber(product.orderQty || 1));
-
-      if (!existingOrderProductIds.has(product.id)) {
-        updatedOrders = [
-          {
-            id: generateId(),
-            productId: product.id,
-            productName: product.model || product.brandUses || product.sku || product.name || "Product",
-            variant: product.sizeGauge || "",
-            quantity: reorderQty,
-            orderedDate: new Date().toISOString().slice(0, 10),
-            supplier: resolveSupplierName(product.supplier || "", suppliers),
-            lastBuyPrice: product.lastBuyPrice,
-            status: "OPEN" as const,
-          },
-          ...updatedOrders,
-        ];
-        existingOrderProductIds.add(product.id);
-        hasOrderChanges = true;
-      }
-
-      if (!product.ordered) {
-        hasProductChanges = true;
-        return {
-          ...product,
-          ordered: true,
-          orderedDate: product.orderedDate || new Date().toISOString().slice(0, 10),
-        };
-      }
-
-      return product;
-    });
-
-    if (hasOrderChanges) {
-      saveOrders(updatedOrders);
-      addActivity("Auto-created purchase order suggestions for low/out-of-stock items.");
-    }
-
-    if (hasProductChanges) {
-      saveProducts(updatedProducts);
-      setProducts(updatedProducts);
-    }
-  }, [alertProducts, products]);
-
-  const orderStats = useMemo(() => {
-    const orderedCount = lowStockProducts.filter(({ product }) => product.ordered).length;
-    const reorderUnits = lowStockProducts.reduce(
-      (sum, { stock, minimum }) => sum + Math.max(0, (minimum ?? 0) - stock),
-      0
-    );
-
-    return {
-      lowStockLines: lowStockProducts.length,
-      orderedCount,
-      pendingCount: Math.max(0, lowStockProducts.length - orderedCount),
-      reorderUnits,
+    const orderedDate = new Date().toISOString().slice(0, 10);
+    const updatedProducts = products.map((product) => product.id === ordering.product.id ? { ...product, ordered: true, orderedDate } : product);
+    const nextOrder = {
+      id: generateId(),
+      productId: ordering.product.id,
+      productName: productLabel(ordering.product),
+      variant: ordering.variant,
+      quantity,
+      orderedDate,
+      supplier: resolveSupplierName(ordering.product.supplier || "", suppliers),
+      lastBuyPrice: ordering.product.lastBuyPrice,
+      status: "OPEN" as const,
     };
-  }, [lowStockProducts]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search]);
+    saveProducts(updatedProducts);
+    saveOrders([nextOrder, ...currentOrders]);
+    setProducts(updatedProducts);
+    setOrders([nextOrder, ...currentOrders]);
+    addActivity(`Created purchase order for ${quantity} ${productLabel(ordering.product)} from Low / Out of Stock`);
+    setOrdering(null);
+  };
 
-  const totalPages = Math.max(1, Math.ceil(lowStockProducts.length / ITEMS_PER_PAGE));
+  const clearFilters = () => {
+    setSearch("");
+    setCategory("All");
+    setStatus("ALL");
+  };
 
-  useEffect(() => {
-    setCurrentPage((previous) => Math.min(previous, totalPages));
-  }, [totalPages]);
-
-  const paginatedLowStockProducts = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return lowStockProducts.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [lowStockProducts, currentPage]);
+  const filtersActive = Boolean(search || category !== "All" || status !== "ALL");
 
   return (
-    <div className="p-6 space-y-6 max-w-[2200px] mx-auto animate-fade-in-up">
+    <div className="p-6 space-y-6 max-w-[1800px] mx-auto animate-fade-in-up">
       <div className="command-hero command-hero-inventory-order">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="mt-3 command-slip-icon">
-              <TriangleAlert />
-              Low / Out of Stock
-            </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Low / Out of Stock</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-              Items that need restocking.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <OrderStatChip label="Alerts" value={orderStats.lowStockLines} tone="amber" />
-            <OrderStatChip label="Pending" value={orderStats.pendingCount} tone="rose" />
-            <OrderStatChip label="Ordered" value={orderStats.orderedCount} tone="emerald" />
-            <OrderStatChip label="Reorder Units" value={orderStats.reorderUnits} tone="slate" />
-          </div>
-        </div>
+        <div className="mt-3 command-slip-icon"><TriangleAlert />Low / Out of Stock</div>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Low / Out of Stock</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">Items that need restocking.</p>
       </div>
 
-      <div className="glass-card p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Automatic reorder</p>
-            <h2 className="text-2xl font-semibold text-slate-950 mt-2">Low-stock products</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Search low-stock items and mark them as ordered when purchasing has started.
-            </p>
-          </div>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search low-stock items..."
-            className="w-full md:w-80 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-400"
-          />
-        </div>
+      <div className="grid grid-cols-3 gap-3 sm:max-w-xl">
+        <SummaryMetric label="Out of Stock" value={summary.outOfStock} tone="danger" />
+        <SummaryMetric label="Low Stock" value={summary.lowStock} tone="warning" />
+        <SummaryMetric label="On Order" value={summary.onOrder} tone="neutral" />
       </div>
 
-      <div className="glass-card overflow-x-auto">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.28em] text-slate-500">
-              Low-stock table
-            </p>
-            <p className="mt-2 text-sm text-slate-500">
-              Showing page {currentPage} of {totalPages} ({lowStockProducts.length} products currently below their configured threshold).
-            </p>
+      <section className="glass-card p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search items to restock..." className="w-full flex-1 rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900" />
+          <div className="grid grid-cols-2 gap-3 sm:flex">
+            <select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900">{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+            <select value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900"><option value="ALL">All status</option><option value="OUT">Out of Stock</option><option value="LOW">Low Stock</option><option value="ORDERED">On Order</option></select>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-            <span className="h-2 w-2 rounded-full bg-amber-500" />
-            Ordered toggle syncs directly to purchase orders
-          </div>
+          {filtersActive ? <button type="button" onClick={clearFilters} className="text-sm font-medium text-cyan-700">Clear filters</button> : null}
         </div>
-        <table className="sticky-table-header min-w-full text-sm text-slate-700">
-          <thead className="bg-slate-100 text-slate-600">
-            <tr>
-              <th className="p-3 text-left">Product</th>
-              <th className="p-3 text-left">Size / Gauge</th>
-              <th className="p-3 text-left">Current Stock</th>
-              <th className="p-3 text-left">Minimum Stock</th>
-              <th className="p-3 text-left">Order Qty</th>
-              <th className="p-3 text-left">Ordered Date</th>
-              <th className="p-3 text-left">Supplier</th>
-              <th className="p-3 text-left">Status</th>
-              <th className="p-3 text-left">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lowStockProducts.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="p-6 text-center text-slate-500">
-                  No products are currently below their minimum stock threshold.
-                </td>
-              </tr>
-            ) : (
-              paginatedLowStockProducts.map(({ product, stock, minimum, variantSummary }) => (
-                <tr key={product.id} className="border-t border-slate-200 transition hover:bg-amber-50/35">
-                  <td className="p-3 text-slate-600">
-                    <p className="font-semibold text-slate-950">{product.brandUses || product.model || product.name}</p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {product.model || "-"} • {product.sizeGauge || variantSummary || "-"} • {product.productCode || "-"}
-                    </p>
-                  </td>
-                  <td className="p-3 text-slate-600">{product.sizeGauge || variantSummary || "-"}</td>
-                  <td className="p-3 font-semibold underline decoration-2 underline-offset-2 text-slate-700">{stock}</td>
-                  <td className="p-3 text-slate-600">{minimum}</td>
-                  <td className="p-3 text-slate-600">{Math.max(1, Number(product.orderQty ?? 0))}</td>
-                  <td className="p-3 text-slate-600">{product.orderedDate || "-"}</td>
-                  <td className="p-3 text-slate-600">{resolveSupplierName(product.supplier || "", suppliers) || "-"}</td>
-                  <td className="p-3 text-slate-600">
-                    <div className="flex flex-wrap gap-2">
-                      <span
-                        className={`rounded-full px-3 py-1 ${
-                          stock <= 0
-                            ? "bg-rose-100 text-rose-700"
-                            : "bg-amber-200 text-amber-900"
-                        }`}
-                      >
-                        {stock <= 0 ? "Out of stock" : "Low stock"}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="p-3 text-slate-600">
-                    <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(product.ordered)}
-                        onChange={(event) => {
-                          const updatedProduct = setOrderedFlag(product.id, event.target.checked);
-                          syncOrderForProduct(updatedProduct);
-                        }}
-                        className="h-4 w-4 rounded border-slate-300 text-slate-900"
-                      />
-                      {product.ordered ? "Ordered" : "Mark ordered"}
-                    </label>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-6 py-4">
-          {Array.from({ length: totalPages }, (_, index) => {
-            const page = index + 1;
-            const isActive = page === currentPage;
+      </section>
 
-            return (
-              <button
-                key={page}
-                type="button"
-                onClick={() => setCurrentPage(page)}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                  isActive
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                {page}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <section className="glass-card overflow-x-auto">
+        <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4"><h2 className="text-lg font-semibold text-slate-950">Restock items</h2><span className="text-sm text-slate-600">{filteredItems.length} items</span></div>
+        {filteredItems.length === 0 ? <p className="p-6 text-sm text-slate-600">{filtersActive ? "No items match these filters." : "No items currently need restocking."}</p> : (
+          <table className="min-w-[1050px] w-full text-sm text-slate-700">
+            <thead className="bg-slate-100 text-slate-600"><tr><th className="p-3 text-left">Product</th><th className="p-3 text-left">Current</th><th className="p-3 text-left">Minimum</th><th className="p-3 text-left">Order Qty</th><th className="p-3 text-left">Supplier</th><th className="p-3 text-left">Status</th><th className="p-3 text-right">Action</th></tr></thead>
+            <tbody>{filteredItems.map((item) => {
+              const supplier = resolveSupplierName(item.product.supplier || "", suppliers);
+              const isOut = item.stock === 0;
+              return <tr key={item.product.id} className="border-t border-slate-200 hover:bg-slate-50"><td className="p-3"><p className="font-medium text-slate-950">{item.product.brandUses || productLabel(item.product)}</p><p className="mt-1 text-xs text-slate-500">{productLabel(item.product)}{item.variant ? ` · ${item.variant}` : ""}</p></td><td className={`p-3 text-lg font-semibold ${isOut ? "text-rose-700" : "text-slate-950"}`}>{item.stock}</td><td className="p-3">{item.minimum || "-"}</td><td className="p-3">{item.product.orderQty && item.product.orderQty > 0 ? item.product.orderQty : "No default"}</td><td className="p-3">{supplier || "NO SUPPLIER"}</td><td className="p-3"><span className={item.onOrderQuantity > 0 ? "text-sm font-medium text-cyan-700" : isOut ? "text-sm font-medium text-rose-700" : "text-sm font-medium text-amber-700"}>{item.onOrderQuantity > 0 ? `${item.onOrderQuantity} ON ORDER` : isOut ? "OUT OF STOCK" : "LOW STOCK"}</span></td><td className="p-3 text-right">{item.onOrderQuantity > 0 ? <span className="text-sm text-slate-600">On order</span> : <button type="button" onClick={() => openOrderDialog(item)} className="rounded-md bg-cyan-500 px-3 py-2 text-sm font-semibold text-slate-950">Add to Order</button>}</td></tr>;
+            })}</tbody>
+          </table>
+        )}
+      </section>
+
+      {ordering ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"><section role="dialog" aria-modal="true" aria-labelledby="order-dialog-title" className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6"><div className="flex items-start justify-between gap-4"><div><h2 id="order-dialog-title" className="text-xl font-semibold text-slate-950">Add to Order</h2><p className="mt-1 text-sm text-slate-600">{productLabel(ordering.product)}{ordering.variant ? ` · ${ordering.variant}` : ""}</p></div><button type="button" onClick={() => setOrdering(null)} aria-label="Close" className="text-slate-600"><X className="h-5 w-5" /></button></div><dl className="mt-4 grid grid-cols-3 gap-3 border-y border-slate-200 py-4 text-sm"><div><dt className="text-slate-500">Current</dt><dd className="mt-1 font-semibold text-slate-950">{ordering.stock}</dd></div><div><dt className="text-slate-500">Minimum</dt><dd className="mt-1 font-semibold text-slate-950">{ordering.minimum || "-"}</dd></div><div><dt className="text-slate-500">Supplier</dt><dd className="mt-1 truncate font-semibold text-slate-950">{resolveSupplierName(ordering.product.supplier || "", suppliers) || "NO SUPPLIER"}</dd></div></dl><label className="mt-4 block text-sm font-medium text-slate-700">Order Quantity<input type="number" min="1" value={orderQuantity} onChange={(event) => setOrderQuantity(event.target.value)} placeholder="Enter quantity" className="mt-1.5 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900" /></label>{!ordering.product.orderQty ? <p className="mt-2 text-xs text-amber-700">No default order quantity is saved for this item.</p> : null}<div className="mt-5 flex gap-3"><button type="button" disabled={safeNumber(orderQuantity) <= 0} onClick={addToOrder} className="rounded-lg bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50">Add to Order</button><button type="button" onClick={() => setOrdering(null)} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">Cancel</button></div></section></div> : null}
     </div>
   );
 }
 
-function OrderStatChip({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "amber" | "rose" | "emerald" | "slate";
-}) {
-  const toneClass = {
-    amber: "border-amber-200/80 bg-amber-100 text-slate-950",
-    rose: "border-rose-200/80 bg-rose-100 text-slate-950",
-    emerald: "border-emerald-200/80 bg-emerald-100 text-slate-950",
-    slate: "border-slate-200/80 bg-slate-100 text-slate-950",
-  }[tone];
-
-  return (
-    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
-      <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] opacity-80">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
-    </div>
-  );
+function SummaryMetric({ label, value, tone }: { label: string; value: number; tone: "danger" | "warning" | "neutral" }) {
+  const valueClass = tone === "danger" && value > 0 ? "text-rose-700" : tone === "warning" && value > 0 ? "text-amber-700" : "text-slate-950";
+  return <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"><p className="text-sm font-medium text-slate-600">{label}</p><p className={`mt-2 text-2xl font-semibold ${valueClass}`}>{value}</p></div>;
 }
