@@ -142,12 +142,12 @@ export default function ReportsPage() {
       <div className="command-hero command-hero-reports">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">ACTIVITY INTELLIGENCE</p>
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">ACTIVITY</p>
             <div className="mt-3 command-slip-icon">
               <BarChart3 />
               Reports
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Reports Command</h1>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Reports</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
               Review system activity, operational churn, and change patterns across inventory, suppliers, and orders.
             </p>

@@ -477,13 +477,13 @@ export default function ProductsPage() {
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
-              ITEM CREATION BAY
+              INVENTORY
             </p>
             <div className="mt-3 command-slip-icon">
               <SquarePlus />
               Add Inventory
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Add Inventory Command</h1>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Add Inventory</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
               Create new inventory items, assign reorder thresholds, and seed stock lines directly into the warehouse system.
             </p>

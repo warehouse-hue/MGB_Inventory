@@ -168,7 +168,7 @@ export default function SuppliersPage() {
               <Handshake />
               Suppliers
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Suppliers Command</h1>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Suppliers</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
               Maintain supplier contacts, vendor categories, and fast lookup details for reorders and purchasing.
             </p>

@@ -96,7 +96,7 @@ export default function DashboardPage() {
                 MGB OPS BOARD
               </p>
               <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-                Inventory command center
+                Inventory
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600">
                 Live snapshot of stock pressure, open orders, and inventory risk across the warehouse.
@@ -107,7 +107,7 @@ export default function DashboardPage() {
               <SignalChip label="Products" value={stock.totalProducts} tone="cyan" />
               <SignalChip label="Alerts" value={radarStats.totalAlerts} tone="amber" />
               <SignalChip label="Open POs" value={radarStats.inbound} tone="sky" />
-              <SignalChip label="Units on order" value={radarStats.inboundUnits} tone="emerald" />
+              <SignalChip label="Units on Order" value={radarStats.inboundUnits} tone="slate" />
             </div>
           </div>
         </section>
@@ -138,7 +138,7 @@ export default function DashboardPage() {
                 href="/inventory"
               />
               <Card
-                label="On Board for Delivery"
+                label="Open Orders"
                 value={openOrderSummary.count}
                 description="Purchase orders still awaiting completion."
                 accentClassName="bg-slate-50 border-slate-200 text-slate-950"
@@ -158,10 +158,10 @@ export default function DashboardPage() {
                 <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
                   <div>
                     <p className="text-[0.72rem] uppercase tracking-[0.28em] text-slate-500">
-                      Alert radar
+                      Stock
                     </p>
                     <h2 className="mt-2 text-3xl font-semibold text-slate-950">
-                      Stock pressure matrix
+                      Stock pressure
                     </h2>
                     <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
                       A consolidated readout of shortage severity, inbound coverage, and current stock risk.
@@ -200,7 +200,7 @@ export default function DashboardPage() {
                     label="Inbound units"
                     value={openOrderSummary.units}
                     max={Math.max(20, openOrderSummary.units || 1)}
-                    tone="emerald"
+                    tone="slate"
                   />
                 </div>
               </div>
@@ -273,13 +273,13 @@ function SignalChip({
 }: {
   label: string;
   value: number;
-  tone: "cyan" | "amber" | "sky" | "emerald";
+  tone: "cyan" | "amber" | "sky" | "slate";
 }) {
   const toneClass = {
     cyan: "border-cyan-200/80 bg-cyan-100 text-slate-950",
     amber: "border-amber-200/80 bg-amber-100 text-slate-950",
     sky: "border-sky-200/80 bg-sky-100 text-slate-950",
-    emerald: "border-emerald-200/80 bg-emerald-100 text-slate-950",
+    slate: "border-slate-200 bg-slate-50 text-slate-950",
   }[tone];
 
   return (
@@ -301,14 +301,14 @@ function MeterRow({
   label: string;
   value: number;
   max: number;
-  tone: "amber" | "rose" | "sky" | "emerald";
+  tone: "amber" | "rose" | "sky" | "slate";
 }) {
   const width = Math.max(6, Math.min(100, (value / Math.max(max, 1)) * 100));
   const toneClass = {
     amber: "bg-amber-400",
     rose: "bg-rose-400",
     sky: "bg-sky-400",
-    emerald: "bg-emerald-400",
+    slate: "bg-slate-300",
   }[tone];
 
   return (

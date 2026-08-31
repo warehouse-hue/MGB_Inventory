@@ -59,17 +59,7 @@ export default function InventoryPage() {
   const [barcodeQuantity, setBarcodeQuantity] = useState("1");
   const [barcodeAction, setBarcodeAction] = useState<"ADD" | "REMOVE">("ADD");
   const [barcodeMessage, setBarcodeMessage] = useState("");
-  const [scannerActive, setScannerActive] = useState(false);
-  const [scannerSupported, setScannerSupported] = useState(false);
-  const [scannerFallback, setScannerFallback] = useState(false);
-  const [scanStatus, setScanStatus] = useState("");
-  const [scanError, setScanError] = useState("");
-
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const previewContainerRef = useRef<HTMLDivElement | null>(null);
-  const barcodeDetectorRef = useRef<any>(null);
-  const scanFrameRef = useRef<number | null>(null);
-  const cameraStreamRef = useRef<MediaStream | null>(null);
+  
 
   const categoryTabs = [
     "All",
@@ -335,179 +325,6 @@ export default function InventoryPage() {
       document.body.appendChild(script);
     });
 
-  const stopScanner = () => {
-    if (scanFrameRef.current) {
-      cancelAnimationFrame(scanFrameRef.current);
-      scanFrameRef.current = null;
-    }
-
-    if (window.Quagga && scannerFallback) {
-      try {
-        window.Quagga.stop();
-      } catch {
-        /* ignore */
-      }
-    }
-
-    if (cameraStreamRef.current) {
-      cameraStreamRef.current.getTracks().forEach((track) => track.stop());
-      cameraStreamRef.current = null;
-    }
-
-    setScannerActive(false);
-    setScannerFallback(false);
-  };
-
-  const scanFrame = async () => {
-    if (!videoRef.current || !barcodeDetectorRef.current || scannerFallback) {
-      return;
-    }
-
-    try {
-      const video = videoRef.current;
-      if (video.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
-        scanFrameRef.current = requestAnimationFrame(scanFrame);
-        return;
-      }
-
-      const barcodes = await barcodeDetectorRef.current.detect(video);
-      if (barcodes.length > 0) {
-        const rawValue = barcodes[0].rawValue;
-        if (rawValue) {
-          setBarcodeInput(rawValue);
-          setScanStatus(`Detected barcode: ${rawValue}`);
-          setBarcodeMessage("");
-          stopScanner();
-          return;
-        }
-      }
-    } catch (error) {
-      setScanError("Barcode detection failed. Please try again.");
-      stopScanner();
-      return;
-    }
-
-    scanFrameRef.current = requestAnimationFrame(scanFrame);
-  };
-
-  const startScanner = async () => {
-    setScanError("");
-    setScanStatus("");
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setScanError("Camera barcode scanning is not supported in this browser.");
-      setScannerSupported(false);
-      return;
-    }
-
-    const BarcodeDetectorAPI = (window as any).BarcodeDetector;
-    if (BarcodeDetectorAPI) {
-      try {
-        const supportedFormats = await BarcodeDetectorAPI.getSupportedFormats();
-        barcodeDetectorRef.current = new BarcodeDetectorAPI({
-          formats:
-            supportedFormats && supportedFormats.length > 0
-              ? supportedFormats
-              : ["ean_13", "ean_8", "upc_e", "code_39", "code_128", "qr_code"],
-        });
-
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        cameraStreamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => {
-            /* ignore play errors */
-          });
-        }
-
-        setScannerActive(true);
-        setScannerFallback(false);
-        requestAnimationFrame(scanFrame);
-        return;
-      } catch (error) {
-        setScanError("Unable to access the camera. Please allow permission or try another device.");
-        setScannerActive(false);
-        return;
-      }
-    }
-
-    const quaggaSrc = "https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js";
-    try {
-      await loadScript(quaggaSrc);
-      if (!window.Quagga) {
-        throw new Error("Quagga failed to load.");
-      }
-
-      const target = previewContainerRef.current;
-      if (!target) {
-        throw new Error("Scanner preview container not found.");
-      }
-
-      setScannerFallback(true);
-      setScannerActive(true);
-
-      window.Quagga.init(
-        {
-          inputStream: {
-            name: "Live",
-            type: "LiveStream",
-            target,
-            constraints: {
-              facingMode: "environment",
-              width: { min: 640 },
-              height: { min: 480 },
-            },
-          },
-          locator: {
-            patchSize: "medium",
-            halfSample: true,
-          },
-          decoder: {
-            readers: [
-              "code_128_reader",
-              "ean_reader",
-              "ean_13_reader",
-              "upc_reader",
-              "upc_e_reader",
-              "code_39_reader",
-            ],
-          },
-          locate: true,
-        },
-        (err: any) => {
-          if (err) {
-            setScanError("Camera scanning failed to start on this browser.");
-            setScannerActive(false);
-            setScannerFallback(false);
-            return;
-          }
-
-          window.Quagga.start();
-        }
-      );
-
-      window.Quagga.onDetected((result: any) => {
-        const code = result?.codeResult?.code;
-        if (code) {
-          setBarcodeInput(code);
-          setScanStatus(`Detected barcode: ${code}`);
-          setBarcodeMessage("");
-          stopScanner();
-        }
-      });
-    } catch (error) {
-      setScanError("Barcode scanning is not supported in this browser.");
-      setScannerActive(false);
-      setScannerFallback(false);
-    }
-  };
-
-  useEffect(() => {
-    setScannerSupported(Boolean(navigator.mediaDevices?.getUserMedia));
-    return () => {
-      stopScanner();
-    };
-  }, []);
 
   const handleBarcodeQuickEntry = () => {
     const barcode = barcodeInput.trim();
@@ -695,13 +512,13 @@ export default function InventoryPage() {
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
-              STOCK CONTROL GRID
+              STOCK
             </p>
             <div className="mt-3 command-slip-icon">
               <Boxes />
               Inventory
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory Command</h1>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
               Live warehouse stock view with fast filtering, line-by-line status, and direct restock controls.
             </p>
@@ -850,48 +667,7 @@ export default function InventoryPage() {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr]">
-              <div className="grid gap-2">
-                <button
-                  type="button"
-                  onClick={scannerActive ? stopScanner : startScanner}
-                  className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                >
-                  {scannerActive ? "Stop camera scan" : "Scan with camera"}
-                </button>
-                {scannerSupported ? (
-                  <p className="text-sm text-slate-500">
-                    Use your device camera to scan a barcode. If supported, the detected value will fill the barcode field.
-                  </p>
-                ) : (
-                  <p className="text-sm text-slate-500">
-                    Camera scan is only available in supported browsers with camera access.
-                  </p>
-                )}
-                {scanStatus ? (
-                  <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                    {scanStatus}
-                  </div>
-                ) : null}
-                {scanError ? (
-                  <div className="rounded-3xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-                    {scanError}
-                  </div>
-                ) : null}
-              </div>
-              <div
-                ref={previewContainerRef}
-                className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 h-56"
-              >
-                <video
-                  ref={videoRef}
-                  className="h-56 w-full object-cover"
-                  autoPlay
-                  muted
-                  playsInline
-                />
-              </div>
-            </div>
+            
 
             {barcodeMessage ? (
               <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">

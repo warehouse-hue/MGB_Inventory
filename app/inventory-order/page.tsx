@@ -284,13 +284,13 @@ export default function InventoryOrderPage() {
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
-              REORDER MONITOR
+              LOW STOCK
             </p>
             <div className="mt-3 command-slip-icon">
               <TriangleAlert />
               Low/Out of Stock
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Low/Out of Stock Command</h1>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Low/Out of Stock</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
               Live low-stock queue for products below minimum threshold, with direct ordered-state control.
             </p>
