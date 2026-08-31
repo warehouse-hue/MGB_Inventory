@@ -6,6 +6,7 @@
   --sidebar: #111416;
   --surface: #171b1d;
   --surface-raised: #202528;
+  --surface-hover: #1b2022;
   --border: #2a3033;
   --text-primary: #f4f6f6;
   --text-secondary: #b4bec1;
@@ -427,9 +428,9 @@ a:not(.nav-link) {
 }
 
 tbody tr:hover {
-  background: var(--surface-raised);
+  background: var(--surface-hover);
 }
 
-:is(.hover\:bg-white:hover, .hover\:bg-white\/90:hover, .hover\:bg-slate-50:hover, .hover\:bg-slate-100:hover) {
-  background-color: var(--surface-raised) !important;
+:is(.hover\:bg-white:hover, .hover\:bg-white\/90:hover, .hover\:bg-slate-50:hover, .hover\:bg-slate-100:hover, .hover\:bg-sky-50\/35:hover) {
+  background-color: var(--surface-hover) !important;
 }
