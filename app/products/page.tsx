@@ -1,46 +1,79 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SquarePlus } from "lucide-react";
 import {
-  getAppSettings,
-  getProducts,
-  saveProducts,
-  getInventory,
-  saveInventory,
-  getOrders,
-  saveOrders,
-  getSuppliers,
   addActivity,
   generateId,
-  resolveSupplierName,
-  Product,
+  getAppSettings,
+  getInventory,
+  getOrders,
+  getProducts,
+  getSuppliers,
   InventoryItem,
+  Product,
+  resolveSupplierName,
+  saveInventory,
+  saveOrders,
+  saveProducts,
   Supplier,
 } from "../lib/storage";
 
-const ITEMS_PER_PAGE = 100;
-const LOCATION_OPTIONS = ["Artarmon stoage", "Upper Storage"] as const;
+const PRODUCT_CATEGORIES = [
+  "Drum Skins",
+  "Percussion Skins",
+  "Guitar Strings",
+  "Guitar Accessories",
+  "Drum Sticks",
+  "Drum Accessories",
+  "Batteries",
+  "Tape",
+  "Misc",
+];
+
+type FormState = {
+  brandUses: string;
+  model: string;
+  sizeGauge: string;
+  productCode: string;
+  category: string;
+  orderQty: string;
+  minimum: string;
+  currentStock: string;
+  ordered: boolean;
+  orderedDate: string;
+  supplier: string;
+  lastBuyPrice: string;
+};
 
 function safeNumber(value: unknown) {
-  const numericValue = Number(value);
-  return Number.isNaN(numericValue) ? 0 : numericValue;
+  const numberValue = Number(value);
+  return Number.isNaN(numberValue) ? 0 : numberValue;
 }
 
-function normalizeText(value: string | undefined) {
-  return (value || "").trim().toLowerCase();
-}
-
-function isLowStockByMode(stock: number, threshold: number, mode: "lt" | "lte") {
-  if (threshold <= 0 || stock <= 0) return false;
-  return mode === "lte" ? stock <= threshold : stock < threshold;
+function createInitialForm(): FormState {
+  const settings = getAppSettings();
+  return {
+    brandUses: "",
+    model: "",
+    sizeGauge: "",
+    productCode: "",
+    category: "",
+    orderQty: "0",
+    minimum: settings.defaultMinimumStock > 0 ? String(settings.defaultMinimumStock) : "",
+    currentStock: "0",
+    ordered: false,
+    orderedDate: "",
+    supplier: "",
+    lastBuyPrice: "",
+  };
 }
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<FormState>({
     brandUses: "",
     model: "",
     sizeGauge: "",
@@ -49,88 +82,71 @@ export default function ProductsPage() {
     orderQty: "0",
     minimum: "",
     currentStock: "0",
-    location: LOCATION_OPTIONS[0] as string,
     ordered: false,
     orderedDate: "",
     supplier: "",
     lastBuyPrice: "",
   });
-  const [editTarget, setEditTarget] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({
-    category: "",
-    brandUses: "",
-    model: "",
-    sizeGauge: "",
-    productCode: "",
-    orderQty: "0",
-    minimum: "",
-    ordered: false,
-    orderedDate: "",
-    supplier: "",
-    lastBuyPrice: "",
-  });
-  const [editCurrentStock, setEditCurrentStock] = useState("0");
-  const [showMinimumSettings, setShowMinimumSettings] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
-  const [hydrated, setHydrated] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("All");
-  const [search, setSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-
-  const productCategories = [
-    "All",
-    "Drum Skins",
-    "Percussion Skins",
-    "Guitar Strings",
-    "Guitar Accessories",
-    "Drum Sticks",
-    "Drum Accessories",
-    "Batteries",
-    "Tape",
-    "Misc",
-  ];
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [createdName, setCreatedName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const isCreatingRef = useRef(false);
 
   useEffect(() => {
     setProducts(getProducts());
-    setInventory(getInventory());
     setSuppliers(getSuppliers());
-    setHydrated(true);
-
-    const settings = getAppSettings();
-    setForm((current) => ({
-      ...current,
-      minimum: settings.defaultMinimumStock > 0 ? String(settings.defaultMinimumStock) : "",
-      location: settings.defaultLocation,
-    }));
+    setForm(createInitialForm());
   }, []);
 
   const supplierNames = useMemo(
-    () => Array.from(new Set(suppliers.map((supplier) => supplier.name).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    () => Array.from(new Set(suppliers.map((supplier) => supplier.name).filter(Boolean))).sort((left, right) => left.localeCompare(right)),
     [suppliers]
   );
 
-  const stockByProductId = useMemo(() => {
-    const map = new Map<number, number>();
-    for (const item of inventory) {
-      map.set(item.productId, (map.get(item.productId) ?? 0) + safeNumber(item.stock));
-    }
-    return map;
-  }, [inventory]);
+  const updateForm = <Key extends keyof FormState>(key: Key, value: FormState[Key]) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    setCreatedName("");
+  };
 
-  const selectedCategoryLabel =
-    form.category.trim() || (activeCategory !== "All" ? activeCategory : "Misc");
+  const resetForm = () => {
+    setForm(createInitialForm());
+    setErrors({});
+    setCreatedName("");
+  };
 
   const addProduct = () => {
-    const categoryValue = selectedCategoryLabel;
-    if (!categoryValue || (!form.model.trim() && !form.productCode.trim())) return;
+    if (isCreatingRef.current) return;
 
+    const nextErrors: Record<string, string> = {};
+    if (!form.category) nextErrors.category = "Choose a category.";
+    if (!form.model.trim() && !form.productCode.trim()) {
+      nextErrors.identity = "Enter a model or product code.";
+    }
+    if (safeNumber(form.currentStock) < 0) nextErrors.currentStock = "Current stock cannot be negative.";
+    if (safeNumber(form.minimum) < 0) nextErrors.minimum = "Minimum stock cannot be negative.";
+    if (safeNumber(form.orderQty) < 0) nextErrors.orderQty = "Order quantity cannot be negative.";
+    if (safeNumber(form.lastBuyPrice) < 0) nextErrors.lastBuyPrice = "Last buy price cannot be negative.";
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      return;
+    }
+
+    isCreatingRef.current = true;
+    setIsCreating(true);
     const newProductId = generateId();
-
+    const name = form.model.trim() || form.productCode.trim();
     const product: Product = {
       id: newProductId,
-      name: form.model.trim() || form.productCode.trim(),
-      sku: form.productCode.trim() || form.model.trim() || "UNKNOWN",
-      category: categoryValue,
+      name,
+      sku: form.productCode.trim() || name || "UNKNOWN",
+      category: form.category,
       brandUses: form.brandUses.trim(),
       model: form.model.trim(),
       sizeGauge: form.sizeGauge.trim(),
@@ -142,892 +158,155 @@ export default function ProductsPage() {
       supplier: resolveSupplierName(form.supplier.trim(), suppliers),
       lastBuyPrice: form.lastBuyPrice ? safeNumber(form.lastBuyPrice) : undefined,
     };
-
-    const inventoryItems: InventoryItem[] = [
-      {
-        id: generateId(),
-        productId: product.id,
-        variant: product.sizeGauge || "",
-        stock: Math.max(0, safeNumber(form.currentStock)),
-        location: form.location.trim() || getAppSettings().defaultLocation,
-      },
-    ];
+    const inventoryItem: InventoryItem = {
+      id: generateId(),
+      productId: product.id,
+      variant: product.sizeGauge || "",
+      stock: Math.max(0, safeNumber(form.currentStock)),
+      location: getAppSettings().defaultLocation,
+    };
 
     if (form.ordered) {
-      const nextOrder = {
-        id: generateId(),
-        productId: product.id,
-        productName: product.model || product.brandUses || product.sku || product.name || "Product",
-        variant: product.sizeGauge || "",
-        quantity: safeNumber(form.orderQty),
-        orderedDate: form.orderedDate || new Date().toISOString().slice(0, 10),
-        supplier: resolveSupplierName(form.supplier.trim(), suppliers),
-        lastBuyPrice: form.lastBuyPrice ? safeNumber(form.lastBuyPrice) : undefined,
-        status: "OPEN" as const,
-      };
-
-      saveOrders([nextOrder, ...getOrders()]);
+      saveOrders([
+        {
+          id: generateId(),
+          productId: product.id,
+          productName: product.model || product.brandUses || product.sku || product.name || "Product",
+          variant: product.sizeGauge || "",
+          quantity: safeNumber(form.orderQty),
+          orderedDate: product.orderedDate || new Date().toISOString().slice(0, 10),
+          supplier: product.supplier,
+          lastBuyPrice: product.lastBuyPrice,
+          status: "OPEN",
+        },
+        ...getOrders(),
+      ]);
     }
 
-    const updatedInventory = [...inventoryItems, ...inventory];
-    saveInventory(updatedInventory);
     const updatedProducts = [product, ...products];
+    saveInventory([inventoryItem, ...getInventory()]);
     saveProducts(updatedProducts);
     setProducts(updatedProducts);
-    setInventory(updatedInventory);
     addActivity(`Added product ${product.name}`);
-    setForm({
-      brandUses: "",
-      model: "",
-      sizeGauge: "",
-      productCode: "",
-      category: activeCategory !== "All" ? activeCategory : "",
-      orderQty: "0",
-      minimum: getAppSettings().defaultMinimumStock > 0 ? String(getAppSettings().defaultMinimumStock) : "",
-      currentStock: "0",
-      location: getAppSettings().defaultLocation,
-      ordered: false,
-      orderedDate: "",
-      supplier: "",
-      lastBuyPrice: "",
-    });
-  };
-
-  const deleteProduct = (productId: number) => {
-    const removed = products.find((product) => product.id === productId);
-    const updatedProducts = products.filter((product) => product.id !== productId);
-    saveProducts(updatedProducts);
-    const updatedInventory = getInventory().filter((item) => item.productId !== productId);
-    saveInventory(updatedInventory);
-    setProducts(updatedProducts);
-    setInventory(updatedInventory);
-    addActivity(`Deleted product ${removed?.name ?? productId}`);
-    setDeleteTarget(null);
-  };
-
-  const startEditProduct = (product: Product) => {
-    setEditTarget(product.id);
-    setEditForm({
-      category: product.category || "",
-      brandUses: product.brandUses || "",
-      model: product.model || "",
-      sizeGauge: product.sizeGauge || "",
-      productCode: product.productCode || "",
-      orderQty: String(product.orderQty ?? 0),
-      minimum: product.minimum != null ? String(product.minimum) : "",
-      ordered: Boolean(product.ordered),
-      orderedDate: product.orderedDate || "",
-      supplier: resolveSupplierName(product.supplier || "", suppliers),
-      lastBuyPrice: product.lastBuyPrice != null ? String(product.lastBuyPrice) : "",
-    });
-    const currentStock = inventory
-      .filter((item) => item.productId === product.id)
-      .reduce((sum, item) => sum + safeNumber(item.stock), 0);
-    setEditCurrentStock(String(currentStock));
-  };
-
-  const saveProductEdits = () => {
-    if (editTarget === null) return;
-
-    const currentProduct = products.find((product) => product.id === editTarget);
-    if (!currentProduct) return;
-
-    const nextCategory = editForm.category || currentProduct.category;
-    const nextBrandUses = editForm.brandUses.trim();
-    const nextModel = editForm.model.trim();
-    const nextSizeGauge = editForm.sizeGauge.trim();
-    const nextProductCode = editForm.productCode.trim();
-    const nextOrderQty = safeNumber(editForm.orderQty);
-    const nextMinimum = editForm.minimum ? safeNumber(editForm.minimum) : undefined;
-    const nextOrdered = editForm.ordered;
-    const nextOrderedDate = editForm.orderedDate;
-    const nextSupplier = resolveSupplierName(editForm.supplier.trim(), suppliers);
-    const nextLastBuyPrice = editForm.lastBuyPrice
-      ? safeNumber(editForm.lastBuyPrice)
-      : undefined;
-
-    const updatedProducts = products.map((product) =>
-      product.id === editTarget
-        ? {
-            ...product,
-            category: nextCategory,
-            brandUses: nextBrandUses,
-            model: nextModel,
-            sizeGauge: nextSizeGauge,
-            productCode: nextProductCode,
-            orderQty: nextOrderQty,
-            minimum: nextMinimum,
-            ordered: nextOrdered,
-            orderedDate: nextOrderedDate,
-            supplier: nextSupplier,
-            lastBuyPrice: nextLastBuyPrice,
-          }
-        : product
-    );
-
-    saveProducts(updatedProducts);
-    setProducts(updatedProducts);
-
-    const currentOrders = getOrders();
-    const existingOrder = currentOrders.find((order) => order.productId === editTarget);
-    let updatedOrders = currentOrders;
-
-    if (editForm.ordered) {
-      const order = {
-        id: existingOrder?.id ?? generateId(),
-        productId: editTarget,
-        productName:
-          currentProduct.model || currentProduct.brandUses || currentProduct.sku || currentProduct.name || "Product",
-        variant: currentProduct.sizeGauge || "",
-        quantity: safeNumber(editForm.orderQty),
-        orderedDate: editForm.orderedDate || new Date().toISOString().slice(0, 10),
-        supplier: resolveSupplierName(editForm.supplier.trim(), suppliers),
-        lastBuyPrice: editForm.lastBuyPrice ? safeNumber(editForm.lastBuyPrice) : undefined,
-        status: "OPEN" as const,
-      };
-
-      updatedOrders = existingOrder
-        ? updatedOrders.map((item) =>
-            item.productId === editTarget ? order : item
-          )
-        : [order, ...updatedOrders];
-    } else {
-      updatedOrders = updatedOrders.filter((item) => item.productId !== editTarget);
-    }
-
-    saveOrders(updatedOrders);
-
-    const currentStock = Math.max(0, safeNumber(editCurrentStock));
-    const existingForProduct = inventory.filter((item) => item.productId === editTarget);
-    const baseRow = existingForProduct[0];
-
-    const updatedInventory = [
-      ...inventory.filter((item) => item.productId !== editTarget),
-      {
-        id: baseRow?.id ?? generateId(),
-        productId: editTarget,
-        variant: baseRow?.variant || currentProduct.sizeGauge || "",
-        stock: currentStock,
-        location: baseRow?.location || getAppSettings().defaultLocation,
-      },
-    ];
-
-    saveInventory(updatedInventory);
-    setInventory(updatedInventory);
-
-    const currentStockTotal = inventory
-      .filter((item) => item.productId === editTarget)
-      .reduce((sum, item) => sum + safeNumber(item.stock), 0);
-    const changedFields: string[] = [];
-
-    if ((currentProduct.category || "") !== nextCategory) changedFields.push(`category to ${nextCategory || "-"}`);
-    if ((currentProduct.brandUses || "") !== nextBrandUses) changedFields.push(`brand/uses to ${nextBrandUses || "-"}`);
-    if ((currentProduct.model || "") !== nextModel) changedFields.push(`model to ${nextModel || "-"}`);
-    if ((currentProduct.sizeGauge || "") !== nextSizeGauge) changedFields.push(`size/gauge to ${nextSizeGauge || "-"}`);
-    if ((currentProduct.productCode || "") !== nextProductCode) changedFields.push(`product code to ${nextProductCode || "-"}`);
-    if (safeNumber(currentProduct.orderQty ?? 0) !== nextOrderQty) changedFields.push(`order qty to ${nextOrderQty}`);
-    if (safeNumber(currentProduct.minimum ?? 0) !== safeNumber(nextMinimum ?? 0)) {
-      changedFields.push(`minimum to ${nextMinimum ?? 0}`);
-    }
-    if (Boolean(currentProduct.ordered) !== nextOrdered) changedFields.push(nextOrdered ? "marked ordered" : "cleared ordered status");
-    if ((currentProduct.orderedDate || "") !== nextOrderedDate && nextOrdered) changedFields.push(`ordered date to ${nextOrderedDate || "-"}`);
-    if ((resolveSupplierName(currentProduct.supplier || "", suppliers) || "") !== nextSupplier) {
-      changedFields.push(`supplier to ${nextSupplier || "-"}`);
-    }
-    if (safeNumber(currentProduct.lastBuyPrice ?? 0) !== safeNumber(nextLastBuyPrice ?? 0)) {
-      changedFields.push(`last buy price to ${nextLastBuyPrice ?? 0}`);
-    }
-    if (currentStockTotal !== currentStock) changedFields.push(`stock to ${currentStock}`);
-
-    addActivity(
-      changedFields.length > 0
-        ? `Updated ${currentProduct.name}: ${changedFields.join(", ")}`
-        : `Opened and saved ${currentProduct.name} with no field changes`
-    );
-    setEditTarget(null);
-  };
-
-  const getProductStock = (productId: number) => {
-    return stockByProductId.get(productId) ?? 0;
-  };
-
-  const filteredProducts = useMemo(() => {
-    return products
-      .filter((product) => {
-        const matchesCategory =
-          activeCategory === "All" || product.category === activeCategory;
-
-        const normalizedSearch = search.toLowerCase().trim();
-        if (!normalizedSearch) {
-          return matchesCategory;
-        }
-
-        const searchFields = [
-          product.name,
-          product.brandUses,
-          product.model,
-          product.sizeGauge,
-          product.productCode,
-          product.sku,
-          product.supplier,
-          product.category,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-
-        return matchesCategory && searchFields.includes(normalizedSearch);
-      })
-      .sort((left, right) => {
-        const byBrand = normalizeText(left.brandUses).localeCompare(normalizeText(right.brandUses));
-        if (byBrand !== 0) return byBrand;
-
-        const byModel = normalizeText(left.model || left.name).localeCompare(normalizeText(right.model || right.name));
-        if (byModel !== 0) return byModel;
-
-        const bySize = normalizeText(left.sizeGauge).localeCompare(normalizeText(right.sizeGauge));
-        if (bySize !== 0) return bySize;
-
-        return left.id - right.id;
-      });
-  }, [products, activeCategory, search]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeCategory, search]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / ITEMS_PER_PAGE));
-
-  useEffect(() => {
-    setCurrentPage((previous) => Math.min(previous, totalPages));
-  }, [totalPages]);
-
-  const paginatedFilteredProducts = useMemo(() => {
-    return filteredProducts.slice(
-      (currentPage - 1) * ITEMS_PER_PAGE,
-      currentPage * ITEMS_PER_PAGE
-    );
-  }, [filteredProducts, currentPage]);
-
-  const productStats = useMemo(() => {
-    const settings = getAppSettings();
-
-    return {
-      totalItems: products.length,
-      lowStock: products.filter((product) => {
-        const stock = getProductStock(product.id);
-        const threshold = Number(product.minimum ?? 0);
-        return isLowStockByMode(stock, threshold, settings.lowStockMode);
-      }).length,
-      outOfStock: products.filter((product) => {
-        const stock = getProductStock(product.id);
-        const threshold = Number(product.minimum ?? 0);
-        return stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0);
-      }).length,
-      ordered: products.filter((product) => product.ordered).length,
-    };
-  }, [products, stockByProductId]);
-
-  const getStockStatus = (product: Product) => {
-    const settings = getAppSettings();
-    const stock = getProductStock(product.id);
-    const threshold = safeNumber(product.minimum ?? 0);
-    const notStored = stock <= 0 && threshold <= 0;
-    const trackedOutOfStock =
-      stock <= 0 && (settings.includeNonStockedInAlerts || threshold > 0);
-
-    if (notStored) {
-      return {
-        label: "Not Stored",
-        fillClass: "bg-slate-300",
-        badgeClass: "bg-slate-200 text-slate-700",
-        fill: 0,
-      };
-    }
-
-    if (trackedOutOfStock) {
-      return {
-        label: "Out of stock",
-        fillClass: "bg-rose-500",
-        badgeClass: "bg-rose-500 text-white",
-        fill: 0,
-      };
-    }
-
-    if (isLowStockByMode(stock, threshold, settings.lowStockMode)) {
-      return {
-        label: "Low stock",
-        fillClass: "bg-amber-600",
-        badgeClass: "bg-amber-600 text-white",
-        fill: 35,
-      };
-    }
-
-    return {
-      label: "In stock",
-      fillClass: "bg-emerald-500",
-      badgeClass: "bg-emerald-500 text-white",
-      fill: 100,
-    };
+    setForm(createInitialForm());
+    setErrors({});
+    setCreatedName(product.name);
+    setIsCreating(false);
+    isCreatingRef.current = false;
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-[2200px] mx-auto animate-fade-in-up">
+    <div className="p-6 space-y-6 max-w-[1200px] mx-auto animate-fade-in-up">
       <div className="command-hero command-hero-products">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="mt-3 command-slip-icon">
-              <SquarePlus />
-              Add Inventory
-            </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Add Inventory</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-              Add a new product to inventory.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <ProductStatChip label="Items" value={productStats.totalItems} tone="cyan" />
-            <ProductStatChip label="Low" value={productStats.lowStock} tone="amber" />
-            <ProductStatChip label="Zero" value={productStats.outOfStock} tone="rose" />
-            <ProductStatChip label="Ordered" value={productStats.ordered} tone="emerald" />
-          </div>
-        </div>
+        <div className="mt-3 command-slip-icon"><SquarePlus />Add Inventory</div>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Add Inventory</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">Create a new inventory item.</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.6fr_0.6fr]">
-        <div className="glass-card p-6 space-y-4">
-          <div>
-            <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
-              Add a new inventory item
-            </p>
-            <h2 className="text-xl font-semibold text-slate-950 mt-2">
-              New {selectedCategoryLabel} item
-            </h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Create the full product record in one pass, including stock, supplier, and ordering details.
-            </p>
+      {createdName ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <span>Item created successfully: {createdName}</span>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={resetForm} className="font-medium text-cyan-700">Add another</button>
+            <Link href="/inventory" className="font-medium text-cyan-700">View in Inventory</Link>
           </div>
+        </div>
+      ) : null}
 
-          <div className="grid gap-4">
-            <input
-              placeholder="Brand / Uses"
-              value={form.brandUses}
-              onChange={(e) => setForm({ ...form, brandUses: e.target.value })}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            />
-            <input
-              placeholder="Model"
-              value={form.model}
-              onChange={(e) => setForm({ ...form, model: e.target.value })}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            />
-            <input
-              placeholder="Size / Gauge"
-              value={form.sizeGauge}
-              onChange={(e) => setForm({ ...form, sizeGauge: e.target.value })}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            />
-            <input
-              placeholder="Product Code"
-              value={form.productCode}
-              onChange={(e) => setForm({ ...form, productCode: e.target.value })}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            />
-            <button
-              type="button"
-              onClick={() => setShowMinimumSettings((prev) => !prev)}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              {showMinimumSettings ? "Hide minimum" : "Minimum stock settings"}
-            </button>
-            {showMinimumSettings ? (
-              <input
-                type="number"
-                min={0}
-                placeholder="Minimum stock threshold"
-                value={form.minimum}
-                onChange={(e) => setForm({ ...form, minimum: e.target.value })}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-              />
-            ) : null}
-            <input
-              type="number"
-              min={0}
-              placeholder="Current stock"
-              value={form.currentStock}
-              onChange={(e) => setForm({ ...form, currentStock: e.target.value })}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            />
-            <select
-              value={form.location}
-              onChange={(e) => setForm({ ...form, location: e.target.value })}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            >
-              {LOCATION_OPTIONS.map((location) => (
-                <option key={location} value={location}>
-                  {location}
-                </option>
-              ))}
-            </select>
-            <select
-              value={form.supplier}
-              onChange={(e) => setForm({ ...form, supplier: e.target.value })}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            >
-              <option value="">Select supplier</option>
-              {supplierNames.map((supplierName) => (
-                <option key={supplierName} value={supplierName}>
-                  {supplierName}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Last buy price"
-              value={form.lastBuyPrice}
-              onChange={(e) => setForm({ ...form, lastBuyPrice: e.target.value })}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            />
-            <input
-              type="number"
-              min={0}
-              placeholder="Order qty"
-              value={form.orderQty}
-              onChange={(e) => setForm({ ...form, orderQty: e.target.value })}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            />
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-              <label className="flex items-center gap-2 text-slate-700">
+      <section className="glass-card p-6">
+        <div className="space-y-7">
+          <FormSection title="Product">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Category" error={errors.category}>
+                <select value={form.category} onChange={(event) => updateForm("category", event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900">
+                  <option value="">Select category</option>
+                  {PRODUCT_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </Field>
+              <Field label="Brand / Uses">
+                <input value={form.brandUses} onChange={(event) => updateForm("brandUses", event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900" />
+              </Field>
+              <Field label="Model" error={errors.identity}>
+                <input value={form.model} onChange={(event) => updateForm("model", event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900" />
+              </Field>
+              <Field label="Size / Gauge">
+                <input value={form.sizeGauge} onChange={(event) => updateForm("sizeGauge", event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900" />
+              </Field>
+              <Field label="Product Code" error={errors.identity}>
+                <input value={form.productCode} onChange={(event) => updateForm("productCode", event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900" />
+              </Field>
+            </div>
+          </FormSection>
+
+          <FormSection title="Stock">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="Current Stock" error={errors.currentStock}>
+                <input type="number" min="0" value={form.currentStock} onChange={(event) => updateForm("currentStock", event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900" />
+              </Field>
+              <Field label="Minimum Stock" error={errors.minimum}>
+                <input type="number" min="0" value={form.minimum} onChange={(event) => updateForm("minimum", event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900" />
+              </Field>
+              <Field label="Order Qty" error={errors.orderQty}>
+                <input type="number" min="0" value={form.orderQty} onChange={(event) => updateForm("orderQty", event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900" />
+              </Field>
+            </div>
+          </FormSection>
+
+          <FormSection title="Purchasing">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Supplier">
+                <select value={form.supplier} onChange={(event) => updateForm("supplier", event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900">
+                  <option value="">Select supplier</option>
+                  {supplierNames.map((supplier) => <option key={supplier} value={supplier}>{supplier}</option>)}
+                </select>
+              </Field>
+              <Field label="Last Buy Price" error={errors.lastBuyPrice}>
+                <input type="number" min="0" step="0.01" value={form.lastBuyPrice} onChange={(event) => updateForm("lastBuyPrice", event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900" />
+              </Field>
+              <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium text-slate-700">
                 <input
                   type="checkbox"
                   checked={form.ordered}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setForm({
-                      ...form,
-                      ordered: checked,
-                      orderedDate: checked ? (form.orderedDate || new Date().toISOString().slice(0, 10)) : "",
-                    });
-                  }}
-                  className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                  onChange={(event) => updateForm("ordered", event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300"
                 />
                 Ordered
               </label>
+              {form.ordered ? (
+                <Field label="Ordered Date">
+                  <input type="date" value={form.orderedDate} onChange={(event) => updateForm("orderedDate", event.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900" />
+                </Field>
+              ) : null}
             </div>
-            {form.ordered ? (
-              <input
-                type="date"
-                value={form.orderedDate}
-                onChange={(e) => setForm({ ...form, orderedDate: e.target.value })}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-              />
-            ) : null}
-            <select
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            >
-              <option value="">Select category</option>
-              {productCategories
-                .filter((category) => category !== "All")
-                .map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-            </select>
-            <button
-              type="button"
-              onClick={addProduct}
-              className="rounded-2xl bg-slate-950 px-5 py-3 text-white font-semibold transition hover:bg-slate-800"
-            >
-              Create inventory item
-            </button>
-          </div>
+          </FormSection>
         </div>
 
-        <div className="glass-card p-6">
-          <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
-            Inventory sync
-          </p>
-          <h2 className="text-xl font-semibold text-slate-950 mt-2">
-            Auto-seeded stock
-          </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Each product variant creates a matching inventory record with your entered stock, location, supplier, and optional order details.
-          </p>
+        <div className="mt-7 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-5">
+          <button type="button" onClick={addProduct} disabled={isCreating} className="rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-60">
+            {isCreating ? "Creating..." : "Create Inventory Item"}
+          </button>
+          <button type="button" onClick={resetForm} disabled={isCreating} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 disabled:opacity-60">Clear</button>
         </div>
-      </div>
-
-      <div className="glass-card p-4">
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-3">
-            {productCategories.map((category) => (
-              <button
-                key={category}
-                type="button"
-                onClick={() => {
-                  setActiveCategory(category);
-                  if (category !== "All") {
-                    setForm((prev) => ({ ...prev, category }));
-                  }
-                }}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  activeCategory === category
-                    ? "bg-slate-950 text-white"
-                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search products..."
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-          />
-        </div>
-      </div>
-
-      <div className="glass-card overflow-x-auto">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.28em] text-slate-500">
-              Inventory master table
-            </p>
-            <p className="mt-2 text-sm text-slate-500">
-              Showing page {currentPage} of {totalPages} ({filteredProducts.length} total {activeCategory === "All" ? "items" : `${activeCategory} items`}).
-            </p>
-          </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-            <span className="h-2 w-2 rounded-full bg-cyan-500" />
-            Edit rows to manage suppliers, thresholds, and stock variants
-          </div>
-        </div>
-        <table className="sticky-table-header min-w-full text-sm text-slate-700">
-          <thead className="bg-slate-100 text-slate-600">
-            <tr>
-              <th className="p-3 text-left">Category</th>
-              <th className="p-3 text-left">Brand / Uses</th>
-              <th className="p-3 text-left">Model</th>
-              <th className="p-3 text-left">Size / Gauge</th>
-              <th className="p-3 text-left">Current Stock</th>
-              <th className="p-3 text-left">Status</th>
-              <th className="p-3 text-left">Ordered ✅</th>
-              <th className="p-3 text-left">Ordered Date</th>
-              <th className="p-3 text-left">Product Code</th>
-              <th className="p-3 text-left">Supplier</th>
-              <th className="p-3 text-left">Last Buy Price</th>
-              <th className="p-3 text-left">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedFilteredProducts.map((product) => {
-              const stockIn = getProductStock(product.id);
-              return (
-                <Fragment key={product.id}>
-                  <tr className="border-t border-slate-200 transition hover:bg-cyan-50/35">
-                    <td className="p-3 font-medium text-slate-950">{product.category || "-"}</td>
-                    <td className="p-3 font-medium text-slate-950">{product.brandUses || "-"}</td>
-                    <td className="p-3 text-slate-600">{product.model || "-"}</td>
-                    <td className="p-3 text-slate-600">{product.sizeGauge || "-"}</td>
-                    <td className="p-3 font-semibold underline decoration-2 underline-offset-2 text-slate-700">{stockIn}</td>
-                    <td className="p-3 text-slate-600">
-                      {(() => {
-                        const status = getStockStatus(product);
-                        return (
-                          <div className="inline-flex items-center gap-2">
-                            <span className="inline-flex h-5 w-10 items-center rounded-full border border-slate-300 bg-slate-100 p-0.5">
-                              <span
-                                className={`${status.fillClass} h-full rounded-full transition-all duration-200`}
-                                style={{ width: `${status.fill}%` }}
-                              />
-                            </span>
-                            <span className={`inline-flex min-w-[90px] justify-center rounded-full px-2 py-1 text-[11px] font-semibold whitespace-nowrap ${status.badgeClass}`}>
-                              {status.label}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="p-3 text-slate-600">
-                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded border ${product.ordered ? "border-emerald-500 bg-emerald-600 text-white" : "border-slate-300 bg-white text-slate-400"}`}>
-                        {product.ordered ? (
-                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M5 13l4 4L19 7" />
-                          </svg>
-                        ) : null}
-                      </span>
-                    </td>
-                    <td className="p-3 text-slate-600">{product.orderedDate || "-"}</td>
-                    <td className="p-3 text-slate-600">{product.productCode || "-"}</td>
-                    <td className="p-3 text-slate-600">{resolveSupplierName(product.supplier || "", suppliers) || "-"}</td>
-                    <td className="p-3 text-slate-600">{product.lastBuyPrice != null ? `$${product.lastBuyPrice.toFixed(2)}` : "-"}</td>
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                          onClick={() => startEditProduct(product)}
-                        >
-                          Edit details
-                        </button>
-                        {deleteTarget === product.id ? (
-                          <>
-                            <button
-                              type="button"
-                              className="rounded-2xl bg-rose-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-rose-600"
-                              onClick={() => deleteProduct(product.id)}
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                              onClick={() => setDeleteTarget(null)}
-                            >
-                              Cancel
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
-                            onClick={() => setDeleteTarget(product.id)}
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  {editTarget === product.id ? (
-                    <tr className="bg-slate-50">
-                      <td colSpan={12} className="p-0">
-                        <div className="glass-card m-4 p-6">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                            <div>
-                              <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
-                                Edit inventory item
-                              </p>
-                              <h2 className="text-xl font-semibold text-slate-950 mt-2">
-                                {products.find((product) => product.id === editTarget)?.model || "Inventory item details"}
-                              </h2>
-                            </div>
-                            <div className="flex flex-wrap gap-3">
-                              <button
-                                type="button"
-                                className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                                onClick={saveProductEdits}
-                              >
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                                onClick={() => setEditTarget(null)}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="mt-6 grid gap-4 md:grid-cols-2">
-                            <div>
-                              <label className="text-sm text-slate-600">Category</label>
-                              <select
-                                value={editForm.category}
-                                onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              >
-                                {productCategories
-                                  .filter((category) => category !== "All")
-                                  .map((category) => (
-                                    <option key={category} value={category}>
-                                      {category}
-                                    </option>
-                                  ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-sm text-slate-600">Brand / Uses</label>
-                              <input
-                                type="text"
-                                value={editForm.brandUses}
-                                onChange={(e) => setEditForm({ ...editForm, brandUses: e.target.value })}
-                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-sm text-slate-600">Model</label>
-                              <input
-                                type="text"
-                                value={editForm.model}
-                                onChange={(e) => setEditForm({ ...editForm, model: e.target.value })}
-                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-sm text-slate-600">Size / Gauge</label>
-                              <input
-                                type="text"
-                                value={editForm.sizeGauge}
-                                onChange={(e) => setEditForm({ ...editForm, sizeGauge: e.target.value })}
-                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-sm text-slate-600">Product Code</label>
-                              <input
-                                type="text"
-                                value={editForm.productCode}
-                                onChange={(e) => setEditForm({ ...editForm, productCode: e.target.value })}
-                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-sm text-slate-600">Order Qty</label>
-                              <input
-                                type="number"
-                                value={editForm.orderQty}
-                                onChange={(e) => setEditForm({ ...editForm, orderQty: e.target.value })}
-                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-sm text-slate-600">Minimum threshold</label>
-                              <input
-                                type="number"
-                                min={0}
-                                value={editForm.minimum}
-                                onChange={(e) => setEditForm({ ...editForm, minimum: e.target.value })}
-                                placeholder="e.g. 10"
-                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              />
-                              <p className="mt-2 text-xs text-slate-500">
-                                Use this to flag the product for inventory ordering when stock falls below the threshold.
-                              </p>
-                            </div>
-                            <div>
-                              <label className="text-sm text-slate-600">Ordered</label>
-                              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
-                                <label className="flex items-center gap-2 text-slate-700">
-                                  <input
-                                    type="checkbox"
-                                    checked={editForm.ordered}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked;
-                                      setEditForm({
-                                        ...editForm,
-                                        ordered: checked,
-                                        orderedDate: checked ? new Date().toISOString().slice(0, 10) : "",
-                                      });
-                                    }}
-                                    className="h-4 w-4 rounded border-slate-300 text-slate-900"
-                                  />
-                                  Ordered
-                                </label>
-                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900">
-                                  {editForm.orderedDate ? `Ordered on ${editForm.orderedDate}` : "Not ordered yet"}
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="text-sm text-slate-600">Supplier</label>
-                              <select
-                                value={editForm.supplier}
-                                onChange={(e) => setEditForm({ ...editForm, supplier: e.target.value })}
-                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              >
-                                <option value="">Select supplier</option>
-                                {supplierNames.map((supplierName) => (
-                                  <option key={supplierName} value={supplierName}>
-                                    {supplierName}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-sm text-slate-600">Last Buy Price</label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={editForm.lastBuyPrice}
-                                onChange={(e) => setEditForm({ ...editForm, lastBuyPrice: e.target.value })}
-                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-sm text-slate-600">Edit Current Stock</label>
-                              <input
-                                type="number"
-                                min={0}
-                                value={editCurrentStock}
-                                onChange={(e) => setEditCurrentStock(e.target.value)}
-                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-6 py-4">
-          {Array.from({ length: totalPages }, (_, index) => {
-            const page = index + 1;
-            const isActive = page === currentPage;
-
-            return (
-              <button
-                key={page}
-                type="button"
-                onClick={() => setCurrentPage(page)}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                  isActive
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                {page}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      </section>
     </div>
   );
 }
 
-function ProductStatChip({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "cyan" | "amber" | "rose" | "emerald";
-}) {
-  const toneClass = {
-    cyan: "border-cyan-200/80 bg-cyan-100 text-slate-950",
-    amber: "border-amber-200/80 bg-amber-100 text-slate-950",
-    rose: "border-rose-200/80 bg-rose-100 text-slate-950",
-    emerald: "border-emerald-200/80 bg-emerald-100 text-slate-950",
-  }[tone];
-
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
-      <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] opacity-80">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
-    </div>
+    <section>
+      <h2 className="text-sm font-semibold text-slate-950">{title}</h2>
+      <div className="mt-4 border-t border-slate-200 pt-4">{children}</div>
+    </section>
   );
 }
 
+function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+  return (
+    <label className="block text-sm font-medium text-slate-700">
+      {label}
+      <div className="mt-1.5">{children}</div>
+      {error ? <p className="mt-1.5 text-xs text-rose-700">{error}</p> : null}
+    </label>
+  );
+}
