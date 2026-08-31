@@ -16,6 +16,7 @@ import { addTransaction } from "../lib/transactions";
 
 type CountDraft = {
   countInputs: Record<number, string>;
+  countedIds: Record<number, boolean>;
   search: string;
   activeCategory: string;
 };
@@ -49,6 +50,7 @@ export default function InventoryCountPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [countInputs, setCountInputs] = useState<Record<number, string>>({});
+  const [countedIds, setCountedIds] = useState<Record<number, boolean>>({});
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All Inventory");
   const [showReview, setShowReview] = useState(false);
@@ -62,6 +64,7 @@ export default function InventoryCountPage() {
     setItems(inventory);
     setProducts(getProducts());
     setCountInputs(draft?.countInputs ?? {});
+    setCountedIds(draft?.countedIds ?? {});
     setSearch(draft?.search ?? "");
     setActiveCategory(draft?.activeCategory === "All" ? "All Inventory" : draft?.activeCategory ?? "All Inventory");
     setHydrated(true);
@@ -69,8 +72,8 @@ export default function InventoryCountPage() {
 
   useEffect(() => {
     if (!hydrated) return;
-    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ countInputs, search, activeCategory }));
-  }, [activeCategory, countInputs, hydrated, search]);
+    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ countInputs, countedIds, search, activeCategory }));
+  }, [activeCategory, countInputs, countedIds, hydrated, search]);
 
   const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
   const categories = useMemo(
@@ -102,10 +105,10 @@ export default function InventoryCountPage() {
   );
   const summary = {
     selected: filteredItems.length,
-    counted: countedItems.length,
-    matched: countedItems.length - differences.length,
+    counted: filteredItems.filter((item) => countedIds[item.id]).length,
+    matched: filteredItems.filter((item) => countedIds[item.id] && safeNumber(countInputs[item.id]) === safeNumber(item.stock)).length,
     differences: differences.length,
-    remaining: filteredItems.filter((item) => countInputs[item.id] === undefined || countInputs[item.id] === "").length,
+    remaining: filteredItems.filter((item) => !countedIds[item.id]).length,
   };
 
   useEffect(() => {
@@ -126,6 +129,7 @@ export default function InventoryCountPage() {
 
   const clearSession = () => {
     setCountInputs({});
+    setCountedIds({});
     setShowReview(false);
     setConfirmApply(false);
     setCompletion(null);
@@ -159,8 +163,9 @@ export default function InventoryCountPage() {
 
     saveInventory(updatedInventory);
     setItems(updatedInventory);
-    setCompletion({ checked: countedItems.length, matched: summary.matched, adjusted: differences.length });
+    setCompletion({ checked: summary.counted, matched: summary.matched, adjusted: differences.length });
     setCountInputs({});
+    setCountedIds({});
     setShowReview(false);
     setConfirmApply(false);
     clearDraft();
@@ -205,14 +210,13 @@ export default function InventoryCountPage() {
               const physicalCount = countInputs[item.id];
               const difference = physicalCount === undefined || physicalCount === "" ? null : safeNumber(physicalCount) - safeNumber(item.stock);
               const product = productsById.get(item.productId);
-              const isCounted = physicalCount !== undefined && physicalCount !== "";
               return <div key={item.id} role="row" className="grid grid-cols-[150px_190px_minmax(0,1.4fr)_140px_100px_130px_90px_100px] items-center gap-3 border-t border-slate-200 px-4 hover:bg-slate-50">
                 <div className="truncate py-3 text-slate-600">{product?.category || "Misc"}</div>
                 <div className="truncate py-3 font-medium text-slate-950">{product?.brandUses || product?.name || "-"}</div>
                 <div className="min-w-0 py-3"><p className="truncate text-slate-950">{productLabel(product)}</p><p className="truncate text-xs text-slate-500">{product?.productCode || product?.sku || "-"}</p></div>
                 <div className="truncate py-3 text-slate-600">{product?.sizeGauge || item.variant || "-"}</div><div className="py-3 font-semibold text-slate-950">{safeNumber(item.stock)}</div>
                 <div className="py-3"><input aria-label={`Physical count for ${productLabel(productsById.get(item.productId))}`} type="number" min="0" value={physicalCount ?? ""} onChange={(event) => updateCount(item.id, event.target.value)} className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900" /></div>
-                <div className="py-3"><span className={`inline-flex h-5 w-5 items-center justify-center rounded border text-xs ${isCounted ? "border-cyan-400 bg-cyan-500 text-slate-950" : "border-slate-300 bg-white text-transparent"}`}>✓</span></div>
+                <div className="py-3"><input aria-label={`Mark ${productLabel(product)} counted`} type="checkbox" checked={Boolean(countedIds[item.id])} onChange={() => setCountedIds((current) => ({ ...current, [item.id]: !current[item.id] }))} className="h-5 w-5 rounded border-slate-300 bg-slate-50 accent-cyan-600 focus:ring-cyan-500" /></div>
                 <div className={`py-3 font-semibold ${difference === null || difference === 0 ? "text-slate-500" : difference < 0 ? "text-rose-700" : "text-amber-700"}`}>{difference === null ? "-" : difference > 0 ? `+${difference}` : difference}</div>
               </div>;
             })}</div>
