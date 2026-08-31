@@ -8,8 +8,8 @@
   --surface-raised: #202528;
   --border: #2a3033;
   --text-primary: #f4f6f6;
-  --text-secondary: #a7b0b3;
-  --text-muted: #6f797d;
+  --text-secondary: #b4bec1;
+  --text-muted: #7d898d;
   --accent: #20c4c7;
   --accent-hover: #2ed5d8;
   --accent-surface: #123638;
@@ -161,7 +161,7 @@ textarea::placeholder {
   }
 
   .command-slip-icon {
-    @apply inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-[0.7rem] font-semibold tracking-[0.08em];
+    @apply inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium;
     background: var(--surface-raised);
     border-color: var(--border);
     color: var(--text-secondary);
@@ -191,18 +191,18 @@ textarea::placeholder {
   }
 
   .metric-card-amber {
-    background: rgba(242, 184, 75, 0.1) !important;
-    border-color: rgba(242, 184, 75, 0.38) !important;
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
   }
 
   .metric-card-emerald {
-    background: rgba(60, 203, 127, 0.1) !important;
-    border-color: rgba(60, 203, 127, 0.38) !important;
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
   }
 
   .metric-card-rose {
-    background: rgba(239, 91, 91, 0.1) !important;
-    border-color: rgba(239, 91, 91, 0.38) !important;
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
   }
 
   .sticky-table-header thead th {
@@ -228,7 +228,7 @@ textarea::placeholder {
   }
 
   .nav-link {
-    @apply flex items-center justify-between rounded-md border px-3 py-2.5 text-sm font-medium transition duration-200 ease-out;
+    @apply flex items-center justify-between rounded-md border px-3 py-2.5 text-[0.925rem] font-medium transition duration-200 ease-out;
     min-height: 42px;
     background: transparent;
     border-color: transparent;
@@ -325,10 +325,9 @@ textarea::placeholder {
 
   .nav-group-title {
     margin: 0 0.2rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.65rem;
+    font-size: 0.7rem;
     text-transform: uppercase;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.08em;
     color: var(--text-muted);
   }
 
@@ -338,6 +337,15 @@ textarea::placeholder {
     gap: 0.25rem;
     background: transparent;
     border-color: transparent;
+  }
+
+  .command-hero > p,
+  .command-hero > div > div > p:first-child {
+    font-family: inherit;
+    font-size: 0.875rem !important;
+    font-weight: 500;
+    letter-spacing: 0 !important;
+    text-transform: none;
   }
 }
 

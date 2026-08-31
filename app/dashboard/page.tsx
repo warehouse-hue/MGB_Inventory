@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Radar } from "lucide-react";
 import { getAppSettings, getOrders } from "../lib/storage";
 import { getStockSummary } from "../lib/reports";
 
@@ -72,11 +71,8 @@ export default function DashboardPage() {
     const inbound = openOrderSummary.count;
     const inboundUnits = openOrderSummary.units;
     const totalAlerts = low + out;
-    const pressureScore = Math.min(99, low * 9 + out * 16 + inbound * 5);
-
     return {
       totalAlerts,
-      pressureScore,
       inbound,
       inboundUnits,
       criticalOutOfStockCount: out,
@@ -89,24 +85,25 @@ export default function DashboardPage() {
   return (
     <div className="min-h-[calc(100vh-2rem)] p-6">
       <div className="mx-auto grid max-w-[2200px] gap-6 animate-fade-in-up">
-        <section className="rounded-[32px] border border-slate-200/80 bg-white p-8 shadow-sm">
+        <section className="py-3">
           <div className="flex flex-col gap-8 xl:flex-row xl:items-center xl:justify-between">
             <div className="max-w-2xl">
-              <p className="text-[0.72rem] uppercase tracking-[0.28em] text-slate-400">
-                MGB OPS BOARD
-              </p>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-                Inventory
+              <h1 className="text-4xl font-semibold text-slate-950 sm:text-5xl">
+                Dashboard
               </h1>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600">
-                Live snapshot of stock pressure, open orders, and inventory risk across the warehouse.
+              <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
+                Stock, orders and inventory at a glance.
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <SignalChip label="Products" value={stock.totalProducts} tone="cyan" />
-              <SignalChip label="Alerts" value={radarStats.totalAlerts} tone="amber" />
-              <SignalChip label="Open POs" value={radarStats.inbound} tone="sky" />
+              <SignalChip label="Products" value={stock.totalProducts} />
+              <SignalChip
+                label="Low Stock"
+                value={stock.lowStockCount}
+                tone={stock.lowStockCount > 0 ? "amber" : "slate"}
+              />
+              <SignalChip label="Open POs" value={radarStats.inbound} />
               <SignalChip label="Units on Order" value={radarStats.inboundUnits} tone="slate" />
             </div>
           </div>
@@ -154,50 +151,35 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid gap-5 xl:grid-cols-[1.4fr_0.9fr]">
-              <div className="rounded-[32px] border border-slate-200/90 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
-                  <div>
-                    <p className="text-[0.72rem] uppercase tracking-[0.28em] text-slate-500">
-                      Stock
-                    </p>
-                    <h2 className="mt-2 text-3xl font-semibold text-slate-950">
-                      Stock pressure
-                    </h2>
-                    <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-                      A consolidated readout of shortage severity, inbound coverage, and current stock risk.
-                    </p>
-                  </div>
-                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-                    <p className="text-[0.65rem] uppercase tracking-[0.32em] text-slate-500">
-                      Pressure score
-                    </p>
-                    <p className="mt-2 text-4xl font-semibold text-slate-950">
-                      {radarStats.pressureScore}
-                    </p>
-                  </div>
+              <div className="rounded-lg border border-slate-200/90 bg-white p-6">
+                <div>
+                  <h2 className="text-2xl font-semibold text-slate-950">Stock overview</h2>
+                  <p className="mt-2 max-w-2xl text-base leading-7 text-slate-600">
+                    Current stock levels and incoming orders.
+                  </p>
                 </div>
 
-                <div className="mt-8 space-y-5">
+                <div className="mt-6 space-y-4">
                   <MeterRow
-                    label="Low stock exposure"
+                    label="Low stock"
                     value={stock.lowStockCount}
                     max={Math.max(8, radarStats.totalAlerts || 1)}
                     tone="amber"
                   />
                   <MeterRow
-                    label="Out of stock exposure"
+                    label="Out of stock"
                     value={radarStats.criticalOutOfStockCount}
                     max={Math.max(8, radarStats.totalAlerts || 1)}
                     tone="rose"
                   />
                   <MeterRow
-                    label="Inbound purchase orders"
+                    label="Open purchase orders"
                     value={openOrderSummary.count}
                     max={Math.max(6, openOrderSummary.count || 1)}
                     tone="sky"
                   />
                   <MeterRow
-                    label="Inbound units"
+                    label="Units on order"
                     value={openOrderSummary.units}
                     max={Math.max(20, openOrderSummary.units || 1)}
                     tone="slate"
@@ -206,13 +188,8 @@ export default function DashboardPage() {
               </div>
 
               <div className="grid gap-5">
-                <div className="rounded-[32px] border border-slate-200/90 bg-slate-50 p-6 shadow-sm">
-                  <p className="text-[0.72rem] uppercase tracking-[0.28em] text-slate-500">
-                    Critical queue
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold text-slate-950">
-                    Low stock watchlist
-                  </h2>
+                <div className="rounded-lg border border-slate-200/90 bg-slate-50 p-6">
+                  <h2 className="text-xl font-semibold text-slate-950">Needs attention</h2>
                   <div className="mt-5 space-y-3">
                     {topLowStockItems.length === 0 ? (
                       <EmptyState message="No low stock items are currently flagged." />
@@ -229,13 +206,8 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <div className="rounded-[32px] border border-slate-200/90 bg-slate-50 p-6 shadow-sm">
-                  <p className="text-[0.72rem] uppercase tracking-[0.28em] text-slate-500">
-                    Zero-stock queue
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold text-slate-950">
-                    Out of stock now
-                  </h2>
+                <div className="rounded-lg border border-slate-200/90 bg-slate-50 p-6">
+                  <h2 className="text-xl font-semibold text-slate-950">Out of stock</h2>
                   <div className="mt-5 space-y-3">
                     {topOutOfStockItems.length === 0 ? (
                       <EmptyState
@@ -269,22 +241,20 @@ export default function DashboardPage() {
 function SignalChip({
   label,
   value,
-  tone,
+  tone = "slate",
 }: {
   label: string;
   value: number;
-  tone: "cyan" | "amber" | "sky" | "slate";
+  tone?: "amber" | "slate";
 }) {
   const toneClass = {
-    cyan: "border-cyan-200/80 bg-cyan-100 text-slate-950",
     amber: "border-amber-200/80 bg-amber-100 text-slate-950",
-    sky: "border-sky-200/80 bg-sky-100 text-slate-950",
     slate: "border-slate-200 bg-slate-50 text-slate-950",
   }[tone];
 
   return (
-    <div className={`rounded-[28px] border px-4 py-3 ${toneClass}`}>
-      <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] text-slate-600">
+    <div className={`rounded-lg border px-4 py-3 ${toneClass}`}>
+      <p className="text-sm font-medium text-slate-600">
         {label}
       </p>
       <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
@@ -368,12 +338,12 @@ function Card({
   accentClassName?: string;
   href?: string;
 }) {
-  const className = `rounded-3xl p-5 shadow-sm border transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${accentClassName}`;
+  const className = `rounded-lg p-5 border transition duration-200 hover:bg-slate-100 ${accentClassName}`;
 
   const content = (
     <>
       <div>
-        <p className="text-slate-700 text-[0.75rem] uppercase tracking-[0.28em] font-semibold underline decoration-slate-300 underline-offset-2">
+        <p className="text-sm font-medium text-slate-600">
           {label}
         </p>
         <p className="mt-3 text-3xl font-semibold text-slate-950">{value}</p>

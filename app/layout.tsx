@@ -20,9 +20,6 @@ export default function RootLayout({
               </p>
               <h1 className="text-xl font-semibold text-white">MGB Inventory</h1>
               <p className="mt-2 text-xs text-slate-300">Inventory control and purchasing in one place.</p>
-              <div className="mt-4 inline-flex items-center rounded-md border border-slate-700/50 bg-slate-900/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-200">
-                MGB Operations
-              </div>
             </div>
 
             <SidebarNav />

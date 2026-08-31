@@ -350,7 +350,7 @@ export default function StockProjectionPage() {
   return (
     <div className="p-6 space-y-6 max-w-[2200px] mx-auto animate-fade-in-up">
       <div className="command-hero command-hero-stock-projection">
-        <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">FORECAST PANEL</p>
+        <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">Planning</p>
         <div className="mt-3 command-slip-icon">
           <ChartColumnIncreasing />
           Stock Projection

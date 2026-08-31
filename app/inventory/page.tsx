@@ -512,7 +512,7 @@ export default function InventoryPage() {
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
-              STOCK
+              Stock
             </p>
             <div className="mt-3 command-slip-icon">
               <Boxes />
