@@ -71,6 +71,7 @@ export type PurchaseOrder = {
   productName: string;
   variant: string;
   quantity: number;
+  createdDate?: string;
   orderedDate: string;
   expectedDeliveryDate?: string;
   notes?: string;
