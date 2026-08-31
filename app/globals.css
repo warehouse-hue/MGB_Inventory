@@ -6,7 +6,7 @@
   --sidebar: #111416;
   --surface: #171b1d;
   --surface-raised: #202528;
-  --surface-hover: #1b2022;
+  --surface-hover: var(--accent-surface);
   --border: #2a3033;
   --text-primary: #f4f6f6;
   --text-secondary: #b4bec1;
