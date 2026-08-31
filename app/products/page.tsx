@@ -200,7 +200,8 @@ export default function ProductsPage() {
             orderedDate,
             supplier: updatedProduct.supplier,
             lastBuyPrice: updatedProduct.lastBuyPrice,
-            status: "OPEN" as const,
+            status: "ORDERED" as const,
+            lines: [{ productId: editTarget, productName: updatedProduct.model || updatedProduct.name, variant: updatedProduct.sizeGauge || "", quantity: updatedProduct.orderQty ?? 0, quantityReceived: existingOrder?.lines?.[0]?.quantityReceived ?? 0, lastBuyPrice: updatedProduct.lastBuyPrice }],
           },
           ...existingOrders.filter((order) => order.productId !== editTarget),
         ]
@@ -272,7 +273,8 @@ export default function ProductsPage() {
           orderedDate: product.orderedDate || new Date().toISOString().slice(0, 10),
           supplier: product.supplier,
           lastBuyPrice: product.lastBuyPrice,
-          status: "OPEN",
+          status: "ORDERED",
+          lines: [{ productId: product.id, productName: product.model || product.name, variant: product.sizeGauge || "", quantity: safeNumber(form.orderQty), quantityReceived: 0, lastBuyPrice: product.lastBuyPrice }],
         },
         ...getOrders(),
       ]);

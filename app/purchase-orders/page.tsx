@@ -1,634 +1,73 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ClipboardList } from "lucide-react";
-import {
-  getOrders,
-  saveOrders,
-  updateOrder,
-  addActivity,
-  generateId,
-  PurchaseOrder,
-  getProducts,
-  getSuppliers,
-  resolveSupplierName,
-  saveProducts,
-  getInventory,
-  saveInventory,
-  Supplier,
-} from "../lib/storage";
+import { ClipboardList, Plus, X } from "lucide-react";
+import { addActivity, generateId, getInventory, getOrders, getProducts, getSuppliers, InventoryItem, Product, PurchaseOrder, PurchaseOrderLine, saveInventory, saveOrders, saveProducts, Supplier } from "../lib/storage";
+import { addTransaction } from "../lib/transactions";
 
-const ITEMS_PER_PAGE = 100;
-type OrderTab = "OPEN" | "AWAITING" | "ARCHIVED";
-
-function normalizeText(value: string | undefined) {
-  return (value || "").trim().toLowerCase();
-}
-
-function getOrderLines(order: PurchaseOrder) {
-  return order.lines?.length
-    ? order.lines
-    : [{ productId: order.productId, productName: order.productName, variant: order.variant, quantity: order.quantity, lastBuyPrice: order.lastBuyPrice }];
-}
-
-function getOrderLabel(order: PurchaseOrder) {
-  const lines = getOrderLines(order);
-  return lines.length === 1 ? lines[0].productName : `${order.supplier || "Supplier"} PO (${lines.length} items)`;
-}
+type DraftLine = { productId: string; quantity: string; price: string };
+const emptyLine = (): DraftLine => ({ productId: "", quantity: "", price: "" });
+const asNumber = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
+const linesFor = (order: PurchaseOrder) => order.lines ?? [];
+const outstanding = (line: PurchaseOrderLine) => Math.max(0, line.quantity - line.quantityReceived);
 
 export default function PurchaseOrdersPage() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-  const [showClearArchiveConfirm, setShowClearArchiveConfirm] = useState(false);
-  const [applyStockOrderId, setApplyStockOrderId] = useState<number | null>(null);
-  const [newStockAmount, setNewStockAmount] = useState("");
-  const [search, setSearch] = useState("");
-  const [orderTab, setOrderTab] = useState<OrderTab>("OPEN");
-  const [activePage, setActivePage] = useState(1);
-  const [awaitingPage, setAwaitingPage] = useState(1);
-  const [archivedPage, setArchivedPage] = useState(1);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [receiving, setReceiving] = useState<Record<number, string>>({});
+  const [showCreate, setShowCreate] = useState(false);
+  const [supplier, setSupplier] = useState("");
+  const [expectedDate, setExpectedDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [draftLines, setDraftLines] = useState<DraftLine[]>([emptyLine()]);
 
-  useEffect(() => {
-    setOrders(getOrders());
-    setSuppliers(getSuppliers());
-  }, []);
+  const refresh = () => { setOrders(getOrders()); setProducts(getProducts()); setSuppliers(getSuppliers()); };
+  useEffect(() => { refresh(); window.addEventListener("mgb-storage-updated", refresh as EventListener); return () => window.removeEventListener("mgb-storage-updated", refresh as EventListener); }, []);
+  const selected = orders.find((order) => order.id === selectedId) ?? null;
 
-  const selectedOrder = orders.find((order) => order.id === selectedOrderId) ?? null;
-  const applyStockOrder = orders.find((order) => order.id === applyStockOrderId) ?? null;
-  const activeOrders = orders.filter((order) => order.status === "OPEN");
-  const awaitingOrders = orders.filter((order) => order.status === "DELIVERED_PENDING");
-  const archivedOrders = orders.filter((order) => order.status === "CLOSED");
-  const normalizedSearch = search.toLowerCase().trim();
-  const matchesSearch = (order: PurchaseOrder) => {
-    if (!normalizedSearch) return true;
-
-    const content = [
-      ...getOrderLines(order).flatMap((line) => [line.productName, line.variant]),
-      order.supplier,
-      order.orderedDate,
-      order.status,
-      String(order.quantity),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    return content.includes(normalizedSearch);
+  const receive = () => {
+    if (!selected) return;
+    const inventory = getInventory();
+    const nextInventory = inventory.slice();
+    const nextLines = linesFor(selected).map((line) => {
+      const amount = Math.min(outstanding(line), Math.max(0, asNumber(receiving[line.productId])));
+      if (!amount) return line;
+      const index = nextInventory.findIndex((item) => item.productId === line.productId && (!line.variant || !item.variant || item.variant === line.variant));
+      const priorStock = index >= 0 ? asNumber(nextInventory[index].stock) : 0;
+      if (index >= 0) nextInventory[index] = { ...nextInventory[index], stock: priorStock + amount };
+      else nextInventory.push({ id: generateId(), productId: line.productId, variant: line.variant, stock: amount, location: "Main Warehouse" });
+      addTransaction({ id: generateId(), type: "RESTOCK", productId: line.productId, inventoryItemId: index >= 0 ? nextInventory[index].id : undefined, productName: line.productName, variant: line.variant, quantity: amount, previousStock: priorStock, newStock: priorStock + amount, date: Date.now() });
+      return { ...line, quantityReceived: line.quantityReceived + amount };
+    });
+    if (nextLines.every((line) => line.quantityReceived === selected.lines?.find((current) => current.productId === line.productId)?.quantityReceived)) return;
+    const complete = nextLines.every((line) => outstanding(line) === 0);
+    const nextOrder = { ...selected, lines: nextLines, status: complete ? "RECEIVED" as const : "PARTIALLY_RECEIVED" as const };
+    const nextOrders = orders.map((order) => order.id === selected.id ? nextOrder : order);
+    const receivedProductIds = new Set(nextLines.filter((line, index) => line.quantityReceived !== linesFor(selected)[index].quantityReceived).map((line) => line.productId));
+    saveInventory(nextInventory); saveOrders(nextOrders); saveProducts(products.map((product) => complete && receivedProductIds.has(product.id) ? { ...product, ordered: false, orderedDate: "" } : product));
+    setOrders(nextOrders); setProducts(getProducts()); setReceiving({}); addActivity(`Received stock for PO #${selected.id}`);
   };
 
-  const filteredActiveOrders = activeOrders.filter(matchesSearch);
-  const filteredAwaitingOrders = awaitingOrders.filter(matchesSearch);
-  const filteredArchivedOrders = archivedOrders.filter(matchesSearch);
-
-  const totalActivePages = Math.max(1, Math.ceil(filteredActiveOrders.length / ITEMS_PER_PAGE));
-  const totalAwaitingPages = Math.max(1, Math.ceil(filteredAwaitingOrders.length / ITEMS_PER_PAGE));
-  const totalArchivedPages = Math.max(1, Math.ceil(filteredArchivedOrders.length / ITEMS_PER_PAGE));
-  const paginatedActiveOrders = filteredActiveOrders.slice(
-    (activePage - 1) * ITEMS_PER_PAGE,
-    activePage * ITEMS_PER_PAGE
-  );
-  const paginatedAwaitingOrders = filteredAwaitingOrders.slice(
-    (awaitingPage - 1) * ITEMS_PER_PAGE,
-    awaitingPage * ITEMS_PER_PAGE
-  );
-  const paginatedArchivedOrders = filteredArchivedOrders.slice(
-    (archivedPage - 1) * ITEMS_PER_PAGE,
-    archivedPage * ITEMS_PER_PAGE
-  );
-  const inboundUnits = activeOrders.reduce((sum, order) => sum + getOrderLines(order).reduce((lineSum, line) => lineSum + line.quantity, 0), 0);
-
-  useEffect(() => {
-    setActivePage(1);
-    setAwaitingPage(1);
-    setArchivedPage(1);
-  }, [search]);
-
-  useEffect(() => {
-    setActivePage((previous) => Math.min(previous, totalActivePages));
-  }, [totalActivePages]);
-
-  useEffect(() => {
-    setAwaitingPage((previous) => Math.min(previous, totalAwaitingPages));
-  }, [totalAwaitingPages]);
-
-  useEffect(() => {
-    setArchivedPage((previous) => Math.min(previous, totalArchivedPages));
-  }, [totalArchivedPages]);
-
-  const getStatusLabel = (status: PurchaseOrder["status"]) => {
-    if (status === "OPEN") return "On board";
-    if (status === "DELIVERED_PENDING") return "Awaiting stock";
-    return "Archived";
+  const createOrder = () => {
+    const lines = draftLines.map((draft) => { const product = products.find((item) => item.id === asNumber(draft.productId)); return product && asNumber(draft.quantity) > 0 ? { productId: product.id, productName: product.model || product.name, variant: product.sizeGauge || "", quantity: asNumber(draft.quantity), quantityReceived: 0, lastBuyPrice: draft.price ? asNumber(draft.price) : product.lastBuyPrice } : null; }).filter(Boolean) as PurchaseOrderLine[];
+    if (!supplier || !lines.length) return;
+    const order: PurchaseOrder = { id: generateId(), productId: lines[0].productId, productName: lines.length === 1 ? lines[0].productName : `${supplier} purchase order`, variant: lines.length === 1 ? lines[0].variant : "", quantity: lines.reduce((sum, line) => sum + line.quantity, 0), orderedDate: new Date().toISOString().slice(0, 10), expectedDeliveryDate: expectedDate, notes, supplier, status: "ORDERED", lines };
+    const nextOrders = [order, ...orders]; const orderedIds = new Set(lines.map((line) => line.productId)); const nextProducts = products.map((product) => orderedIds.has(product.id) ? { ...product, ordered: true, orderedDate: order.orderedDate } : product);
+    saveOrders(nextOrders); saveProducts(nextProducts); setOrders(nextOrders); setProducts(nextProducts); setShowCreate(false); setSupplier(""); setExpectedDate(""); setNotes(""); setDraftLines([emptyLine()]); addActivity(`Created PO #${order.id} for ${supplier}`);
   };
 
-  const getStatusClasses = (status: PurchaseOrder["status"]) =>
-    status === "OPEN"
-      ? "inline-flex items-center rounded-full bg-sky-100 px-3 py-1 text-sm font-semibold text-sky-700"
-      : status === "DELIVERED_PENDING"
-        ? "inline-flex items-center rounded-full bg-amber-200 px-3 py-1 text-sm font-semibold text-amber-900"
-        : "inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700";
-
-  const handleMarkReceived = (orderId: number) => {
-    const order = orders.find((item) => item.id === orderId);
-    if (!order) return;
-
-    const updatedOrder: PurchaseOrder = {
-      ...order,
-      status: "DELIVERED_PENDING",
-    };
-
-    const updatedOrders = updateOrder(updatedOrder);
-    setOrders(updatedOrders);
-
-    const orderProductIds = new Set(getOrderLines(order).map((line) => line.productId));
-    const updatedProducts = getProducts().map((product) =>
-      orderProductIds.has(product.id)
-        ? {
-            ...product,
-            ordered: false,
-            orderedDate: "",
-          }
-        : product
-    );
-    saveProducts(updatedProducts);
-
-    addActivity(`Delivered order for ${getOrderLabel(order)}; awaiting stock readjustment`);
-  };
-
-  const handleApplyStockReadjustment = (orderId: number, quantityToAdd: number) => {
-    const order = orders.find((item) => item.id === orderId);
-    if (!order) return;
-
-    const currentInventory = getInventory();
-    const lines = getOrderLines(order);
-    const updatedInventory = currentInventory.slice();
-    for (const line of lines) {
-      const receivedQuantity = lines.length === 1 ? quantityToAdd : line.quantity;
-      const matchingIndex = updatedInventory.findIndex((item) => item.productId === line.productId && (!normalizeText(line.variant) || !normalizeText(item.variant) || normalizeText(item.variant) === normalizeText(line.variant)));
-      if (matchingIndex >= 0) {
-        updatedInventory[matchingIndex] = { ...updatedInventory[matchingIndex], stock: Number(updatedInventory[matchingIndex].stock || 0) + Number(receivedQuantity || 0) };
-      } else {
-        updatedInventory.unshift({ id: generateId(), productId: line.productId, variant: line.variant || "", stock: Number(receivedQuantity || 0), location: "Main Warehouse" });
-      }
-    }
-
-    saveInventory(updatedInventory);
-
-    const updatedOrder: PurchaseOrder = {
-      ...order,
-      status: "CLOSED",
-    };
-
-    const updatedOrders = updateOrder(updatedOrder);
-    setOrders(updatedOrders);
-    setApplyStockOrderId(null);
-    setNewStockAmount("");
-    addActivity(`Applied stock readjustment for ${getOrderLabel(order)}`);
-  };
-
-  const openApplyStockModal = (order: PurchaseOrder) => {
-    setApplyStockOrderId(order.id);
-    setNewStockAmount(String(getOrderLines(order).reduce((sum, line) => sum + line.quantity, 0)));
-  };
-
-  const submitApplyStock = () => {
-    if (!applyStockOrder) return;
-
-    const quantityToAdd = Number(newStockAmount);
-    if (!Number.isFinite(quantityToAdd) || quantityToAdd <= 0) return;
-
-    handleApplyStockReadjustment(applyStockOrder.id, quantityToAdd);
-  };
-
-  const handleClearArchive = () => {
-    const remainingOrders = orders.filter((order) => order.status !== "CLOSED");
-    saveOrders(remainingOrders);
-    setOrders(remainingOrders);
-
-    if (selectedOrderId != null && archivedOrders.some((order) => order.id === selectedOrderId)) {
-      setSelectedOrderId(null);
-    }
-
-    setShowClearArchiveConfirm(false);
-    addActivity("Cleared archived purchase orders");
-  };
-
-  return (
-    <div className="p-6 space-y-6 max-w-[2200px] mx-auto animate-fade-in-up">
-      <div className="command-hero command-hero-orders">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="mt-3 command-slip-icon">
-              <ClipboardList />
-              Orders
-            </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Orders</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-              Track current and received purchase orders.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <OrderChip label="Open" value={activeOrders.length} tone="sky" />
-            <OrderChip label="Awaiting" value={awaitingOrders.length} tone="amber" />
-            <OrderChip label="Units Inbound" value={inboundUnits} tone="cyan" />
-            <OrderChip label="Delivered" value={archivedOrders.length} tone="emerald" />
-            <OrderChip label="Selected" value={selectedOrder ? 1 : 0} tone="slate" />
-          </div>
-        </div>
-      </div>
-
-      <div className="glass-card p-3">
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setOrderTab("OPEN")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-              orderTab === "OPEN"
-                ? "bg-slate-950 text-white"
-                : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-            }`}
-          >
-            Open Orders
-          </button>
-          <button
-            type="button"
-            onClick={() => setOrderTab("AWAITING")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-              orderTab === "AWAITING"
-                ? "bg-slate-950 text-white"
-                : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-            }`}
-          >
-            Awaiting Stock Readjustment
-          </button>
-          <button
-            type="button"
-            onClick={() => setOrderTab("ARCHIVED")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-              orderTab === "ARCHIVED"
-                ? "bg-slate-950 text-white"
-                : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-            }`}
-          >
-            Archived
-          </button>
-        </div>
-      </div>
-
-      <div className="glass-card p-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Track Order</p>
-            <h2 className="text-2xl font-semibold text-slate-950 mt-2">Follow delivery status</h2>
-            <p className="mt-2 text-sm text-slate-600">Select an active order to monitor arrival state and close it once delivered.</p>
-          </div>
-          <div className="space-y-3 md:w-[28rem]">
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search orders..."
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            />
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-slate-700">
-              {selectedOrder ? (
-                <div className="space-y-2">
-                  <p className="text-sm text-slate-500">Selected order</p>
-                  <p className="font-semibold text-slate-950">{selectedOrder.productName}</p>
-                  <p className="text-sm">{selectedOrder.quantity} unit(s)</p>
-                  <p className="text-sm text-slate-500">
-                    Status: <span className={getStatusClasses(selectedOrder.status)}>{getStatusLabel(selectedOrder.status)}</span>
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">Choose an order below to track it.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {orderTab === "OPEN" ? (
-      <div className="glass-card overflow-x-auto">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.28em] text-slate-500">Active orders table</p>
-            <p className="mt-2 text-sm text-slate-500">Showing page {activePage} of {totalActivePages} ({filteredActiveOrders.length} matching active purchase orders).</p>
-          </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-            <span className="h-2 w-2 rounded-full bg-sky-500" />
-            Track a row to expose delivery actions
-          </div>
-        </div>
-        <table className="sticky-table-header min-w-full text-sm text-slate-700">
-          <thead className="bg-slate-100 text-slate-600">
-            <tr>
-              <th className="p-3 text-left">Product</th>
-              <th className="p-3 text-left">Variant</th>
-              <th className="p-3 text-left">Order Qty</th>
-              <th className="p-3 text-left">Ordered Date</th>
-              <th className="p-3 text-left">Supplier</th>
-              <th className="p-3 text-left">Last Buy Price</th>
-              <th className="p-3 text-left">Status</th>
-              <th className="p-3 text-left">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredActiveOrders.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="p-6 text-center text-slate-500">
-                  No active purchase orders match your search.
-                </td>
-              </tr>
-            ) : (
-              paginatedActiveOrders.map((order) => (
-                <tr key={order.id} className="border-t border-slate-200 transition hover:bg-sky-50/35">
-                  <td className="p-3 font-medium text-slate-950">{order.productName}</td>
-                  <td className="p-3 text-slate-600">{order.variant || "-"}</td>
-                  <td className="p-3 text-slate-600">{order.quantity}</td>
-                  <td className="p-3 text-slate-600">{order.orderedDate}</td>
-                  <td className="p-3 text-slate-600">{resolveSupplierName(order.supplier || "", suppliers) || "-"}</td>
-                  <td className="p-3 text-slate-600">
-                    {order.lastBuyPrice != null ? `$${order.lastBuyPrice.toFixed(2)}` : "-"}
-                  </td>
-                  <td className="p-3 text-slate-600">
-                    <span className={getStatusClasses(order.status)}>{getStatusLabel(order.status)}</span>
-                  </td>
-                  <td className="p-3 text-slate-600">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedOrderId(order.id)}
-                      className="text-slate-700 underline transition hover:text-slate-950"
-                    >
-                      Track
-                    </button>
-                    {selectedOrderId === order.id && order.status === "OPEN" ? (
-                      <button
-                        type="button"
-                        onClick={() => handleMarkReceived(order.id)}
-                        className="ml-3 rounded-full bg-emerald-100 px-3 py-1 text-emerald-700 transition hover:bg-emerald-200"
-                      >
-                        Mark received
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-6 py-4">
-          {Array.from({ length: totalActivePages }, (_, index) => {
-            const page = index + 1;
-            const isActive = page === activePage;
-
-            return (
-              <button
-                key={page}
-                type="button"
-                onClick={() => setActivePage(page)}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                  isActive
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                {page}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      ) : null}
-
-      {orderTab === "AWAITING" ? (
-      <div className="glass-card overflow-x-auto">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.28em] text-slate-500">Awaiting stock readjustment</p>
-            <p className="mt-2 text-sm text-slate-500">Showing page {awaitingPage} of {totalAwaitingPages} ({filteredAwaitingOrders.length} delivered orders awaiting stock readjustment).</p>
-          </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-            <span className="h-2 w-2 rounded-full bg-amber-500" />
-            Apply stock then move to archive
-          </div>
-        </div>
-        <table className="sticky-table-header min-w-full text-sm text-slate-700">
-          <thead className="bg-slate-100 text-slate-600">
-            <tr>
-              <th className="p-3 text-left">Product</th>
-              <th className="p-3 text-left">Variant</th>
-              <th className="p-3 text-left">Order Qty</th>
-              <th className="p-3 text-left">Ordered Date</th>
-              <th className="p-3 text-left">Supplier</th>
-              <th className="p-3 text-left">Status</th>
-              <th className="p-3 text-left">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAwaitingOrders.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="p-6 text-center text-slate-500">
-                  No delivered orders are waiting for stock readjustment.
-                </td>
-              </tr>
-            ) : (
-              paginatedAwaitingOrders.map((order) => (
-                <tr key={order.id} className="border-t border-slate-200 transition hover:bg-amber-50/35">
-                  <td className="p-3 font-medium text-slate-950">{order.productName}</td>
-                  <td className="p-3 text-slate-600">{order.variant || "-"}</td>
-                  <td className="p-3 text-slate-600">{order.quantity}</td>
-                  <td className="p-3 text-slate-600">{order.orderedDate}</td>
-                  <td className="p-3 text-slate-600">{resolveSupplierName(order.supplier || "", suppliers) || "-"}</td>
-                  <td className="p-3 text-slate-600">
-                    <span className={getStatusClasses(order.status)}>{getStatusLabel(order.status)}</span>
-                  </td>
-                  <td className="p-3 text-slate-600">
-                    <button
-                      type="button"
-                      onClick={() => openApplyStockModal(order)}
-                      className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700 transition hover:bg-emerald-200"
-                    >
-                      Apply stock + archive
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-6 py-4">
-          {Array.from({ length: totalAwaitingPages }, (_, index) => {
-            const page = index + 1;
-            const isActive = page === awaitingPage;
-
-            return (
-              <button
-                key={page}
-                type="button"
-                onClick={() => setAwaitingPage(page)}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                  isActive
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                {page}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      ) : null}
-
-      {orderTab === "ARCHIVED" ? (
-      <div className="glass-card p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Archived</p>
-            <h2 className="text-2xl font-semibold text-slate-950 mt-2">Delivered orders</h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowClearArchiveConfirm((current) => !current)}
-            className="rounded-full px-3 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-          >
-            Clear archive
-          </button>
-        </div>
-
-        {showClearArchiveConfirm && (
-          <div className="mt-4 rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
-            <p className="font-semibold">Clear all archived orders?</p>
-            <p className="mt-1 text-slate-700">This will remove all delivered orders from the archived section.</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleClearArchive}
-                className="rounded-2xl bg-rose-600 px-4 py-2 text-white shadow-sm transition hover:bg-rose-700"
-              >
-                Confirm clear
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowClearArchiveConfirm(false)}
-                className="rounded-2xl border border-rose-200 bg-white px-4 py-2 text-rose-700 transition hover:bg-rose-100"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-4 space-y-3">
-          {filteredArchivedOrders.length === 0 ? (
-            <p className="text-slate-500">No delivered orders match your search.</p>
-          ) : (
-            paginatedArchivedOrders.map((order) => (
-              <div key={order.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-semibold text-slate-950">{order.productName}</p>
-                  <span className={getStatusClasses(order.status)}>{getStatusLabel(order.status)}</span>
-                </div>
-                <p className="mt-1 text-sm text-slate-600">
-                  {order.variant || "-"} • {order.quantity} unit(s) • Ordered {order.orderedDate}
-                </p>
-              </div>
-            ))
-          )}
-        </div>
-        {filteredArchivedOrders.length > 0 ? (
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4">
-            {Array.from({ length: totalArchivedPages }, (_, index) => {
-              const page = index + 1;
-              const isActive = page === archivedPage;
-
-              return (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => setArchivedPage(page)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                    isActive
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                  }`}
-                >
-                  {page}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-      </div>
-      ) : null}
-
-      {applyStockOrder ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-500">Stock Readjustment</p>
-            <h3 className="mt-2 text-xl font-semibold text-slate-950">Enter New Stock</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              Add this number to current stock for {applyStockOrder.productName} ({applyStockOrder.variant || "-"}).
-            </p>
-
-            <label className="mt-4 block text-sm font-medium text-slate-700">New Stock</label>
-            <input
-              type="number"
-              min={1}
-              value={newStockAmount}
-              onChange={(event) => setNewStockAmount(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
-            />
-
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setApplyStockOrderId(null);
-                  setNewStockAmount("");
-                }}
-                className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-slate-700 transition hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={submitApplyStock}
-                className="rounded-2xl bg-slate-950 px-4 py-2 text-white transition hover:bg-slate-800"
-              >
-                Apply + Archive
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
+  const cancel = () => { if (!selected || ["RECEIVED", "CANCELLED"].includes(selected.status)) return; const next = orders.map((order) => order.id === selected.id ? { ...order, status: "CANCELLED" as const } : order); saveOrders(next); setOrders(next); addActivity(`Cancelled PO #${selected.id}`); };
+  return <div className="p-5 space-y-4 max-w-[1800px] mx-auto animate-fade-in-up">
+    <div className="command-hero command-hero-orders"><div className="mt-3 command-slip-icon"><ClipboardList />Orders</div><h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Orders</h1><p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">Track purchase orders and incoming stock.</p></div>
+    <div className="flex justify-end"><button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-2 rounded-md bg-cyan-500 px-3 py-2 text-sm font-semibold text-slate-950"><Plus className="h-4 w-4" />New Purchase Order</button></div>
+    <section className="glass-card overflow-hidden"><div className="flex items-center justify-between border-b border-slate-200 px-4 py-3"><h2 className="text-base font-semibold text-slate-950">Purchase orders</h2><span className="text-sm text-slate-600">{orders.filter((order) => !["RECEIVED", "CANCELLED"].includes(order.status)).length} active</span></div><div className="divide-y divide-slate-200">{orders.map((order) => <button key={order.id} type="button" onClick={() => { setSelectedId(order.id); setReceiving({}); }} className="flex w-full items-center gap-4 px-4 py-3 text-left hover:bg-slate-50"><span className="w-20 text-sm font-semibold text-slate-950">PO #{order.id}</span><span className="min-w-0 flex-1"><span className="block truncate font-medium text-slate-950">{order.supplier || "No supplier"}</span><span className="block text-xs text-slate-500">{order.orderedDate}{order.expectedDeliveryDate ? ` · Expected ${order.expectedDeliveryDate}` : ""}</span></span><span className="hidden text-sm text-slate-600 sm:block">{linesFor(order).length} items · {linesFor(order).reduce((sum, line) => sum + line.quantity, 0)} units</span><span className="w-40 text-right text-xs font-medium text-cyan-700">{order.status.replaceAll("_", " ")}</span></button>)}{orders.length === 0 ? <p className="p-5 text-sm text-slate-600">No purchase orders yet.</p> : null}</div></section>
+    {selected ? <OrderDialog order={selected} receiving={receiving} setReceiving={setReceiving} onClose={() => setSelectedId(null)} onReceive={receive} onCancel={cancel} /> : null}
+    {showCreate ? <CreateDialog suppliers={suppliers} products={products} supplier={supplier} setSupplier={setSupplier} expectedDate={expectedDate} setExpectedDate={setExpectedDate} notes={notes} setNotes={setNotes} lines={draftLines} setLines={setDraftLines} onCreate={createOrder} onClose={() => setShowCreate(false)} /> : null}
+  </div>;
 }
 
-function OrderChip({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "sky" | "amber" | "cyan" | "emerald" | "slate";
-}) {
-  const toneClass = {
-    sky: "border-sky-200/80 bg-sky-100 text-slate-950",
-    amber: "border-amber-200/80 bg-amber-100 text-slate-950",
-    cyan: "border-cyan-200/80 bg-cyan-100 text-slate-950",
-    emerald: "border-emerald-200/80 bg-emerald-100 text-slate-950",
-    slate: "border-slate-200/80 bg-slate-100 text-slate-950",
-  }[tone];
+function OrderDialog({ order, receiving, setReceiving, onClose, onReceive, onCancel }: { order: PurchaseOrder; receiving: Record<number, string>; setReceiving: React.Dispatch<React.SetStateAction<Record<number, string>>>; onClose: () => void; onReceive: () => void; onCancel: () => void }) { const disabled = ["RECEIVED", "CANCELLED"].includes(order.status); return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 p-4"><section role="dialog" aria-modal="true" className="mx-auto my-6 w-full max-w-4xl rounded-lg border border-slate-200 bg-white p-6"><div className="flex justify-between gap-4"><div><h2 className="text-xl font-semibold text-slate-950">PO #{order.id}</h2><p className="mt-1 text-sm text-slate-600">{order.supplier || "No supplier"} · {order.status.replaceAll("_", " ")}</p></div><button type="button" onClick={onClose} aria-label="Close order" className="text-slate-600"><X className="h-5 w-5" /></button></div><div className="mt-5 overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-100 text-slate-600"><tr><th className="p-2 text-left">Product</th><th className="p-2 text-right">Ordered</th><th className="p-2 text-right">Received</th><th className="p-2 text-right">Outstanding</th><th className="p-2 text-right">Unit Price</th><th className="p-2 text-right">Line Total</th><th className="p-2 text-right">Received Now</th></tr></thead><tbody>{linesFor(order).map((line) => <tr key={line.productId} className="border-t border-slate-200"><td className="p-2"><p className="font-medium text-slate-950">{line.productName}</p><p className="text-xs text-slate-500">{line.variant || "-"}</p></td><td className="p-2 text-right">{line.quantity}</td><td className="p-2 text-right">{line.quantityReceived}</td><td className="p-2 text-right">{outstanding(line)}</td><td className="p-2 text-right">{line.lastBuyPrice != null ? `$${line.lastBuyPrice.toFixed(2)}` : "-"}</td><td className="p-2 text-right">${(line.quantity * (line.lastBuyPrice ?? 0)).toFixed(2)}</td><td className="p-2"><input disabled={disabled || outstanding(line) === 0} type="number" min="0" max={outstanding(line)} value={receiving[line.productId] ?? ""} onChange={(event) => setReceiving((current) => ({ ...current, [line.productId]: event.target.value }))} className="w-20 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-right text-slate-900 disabled:opacity-40" /></td></tr>)}</tbody></table></div>{order.notes ? <p className="mt-4 text-sm text-slate-600">Notes: {order.notes}</p> : null}<div className="mt-5 flex justify-between border-t border-slate-200 pt-4"><button type="button" onClick={onCancel} disabled={disabled} className="text-sm font-medium text-rose-700 disabled:opacity-40">Cancel order</button><button type="button" onClick={onReceive} disabled={disabled} className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-40">Receive Stock</button></div></section></div>; }
 
-  return (
-    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
-      <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] opacity-80">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
-    </div>
-  );
-}
+function CreateDialog({ suppliers, products, supplier, setSupplier, expectedDate, setExpectedDate, notes, setNotes, lines, setLines, onCreate, onClose }: { suppliers: Supplier[]; products: Product[]; supplier: string; setSupplier: (value: string) => void; expectedDate: string; setExpectedDate: (value: string) => void; notes: string; setNotes: (value: string) => void; lines: DraftLine[]; setLines: React.Dispatch<React.SetStateAction<DraftLine[]>>; onCreate: () => void; onClose: () => void }) { return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 p-4"><section role="dialog" aria-modal="true" className="mx-auto my-6 w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-6"><div className="flex justify-between gap-4"><h2 className="text-xl font-semibold text-slate-950">New purchase order</h2><button type="button" onClick={onClose} aria-label="Close new order" className="text-slate-600"><X className="h-5 w-5" /></button></div><div className="mt-4 grid gap-3 md:grid-cols-2"><select value={supplier} onChange={(event) => setSupplier(event.target.value)} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900"><option value="">Select supplier</option>{suppliers.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select><input type="date" value={expectedDate} onChange={(event) => setExpectedDate(event.target.value)} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900" /></div><textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Notes" className="mt-3 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900" />{lines.map((line, index) => <div key={index} className="mt-3 grid gap-2 sm:grid-cols-[1fr_110px_110px]"><select value={line.productId} onChange={(event) => setLines((current) => current.map((item, currentIndex) => currentIndex === index ? { ...item, productId: event.target.value } : item))} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900"><option value="">Select product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.model || product.name}</option>)}</select><input type="number" min="1" placeholder="Qty" value={line.quantity} onChange={(event) => setLines((current) => current.map((item, currentIndex) => currentIndex === index ? { ...item, quantity: event.target.value } : item))} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900" /><input type="number" min="0" step="0.01" placeholder="Unit price" value={line.price} onChange={(event) => setLines((current) => current.map((item, currentIndex) => currentIndex === index ? { ...item, price: event.target.value } : item))} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900" /></div>)}<button type="button" onClick={() => setLines((current) => [...current, emptyLine()])} className="mt-3 text-sm font-medium text-cyan-700">Add line</button><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">Cancel</button><button type="button" onClick={onCreate} className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950">Create Order</button></div></section></div>; }

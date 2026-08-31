@@ -5,6 +5,7 @@ import { ChartColumnIncreasing } from "lucide-react";
 import {
   addActivity,
   getInventory,
+  getOrders,
   getProducts,
   getProjectionDemands,
   getProjectionJobs,
@@ -24,6 +25,7 @@ export default function StockProjectionPage() {
   const today = new Date().toISOString().slice(0, 10);
   const [products, setProducts] = useState<Product[]>([]);
   const [inventory, setInventory] = useState<ReturnType<typeof getInventory>>([]);
+  const [orders, setOrders] = useState<ReturnType<typeof getOrders>>([]);
   const [jobs, setJobs] = useState<ProjectionJob[]>([]);
   const [demands, setDemands] = useState<ProjectionDemand[]>([]);
   const [hasHydrated, setHasHydrated] = useState(false);
@@ -45,6 +47,7 @@ export default function StockProjectionPage() {
   const refreshStockData = () => {
     setProducts(getProducts());
     setInventory(getInventory());
+    setOrders(getOrders());
     setJobs(getProjectionJobs());
     setDemands(getProjectionDemands());
   };
@@ -110,12 +113,13 @@ export default function StockProjectionPage() {
     return new Set(
       jobs
         .filter((job) => {
+          if (job.dateNeeded < today) return false;
           if (!projectionDate) return true;
           return job.dateNeeded <= projectionDate;
         })
         .map((job) => job.id)
     );
-  }, [jobs, projectionDate]);
+  }, [jobs, projectionDate, today]);
 
   const demandByProduct = useMemo(() => {
     const map = new Map<number, number>();
@@ -130,18 +134,31 @@ export default function StockProjectionPage() {
     return map;
   }, [demands, filteredJobIds]);
 
+  const incomingByProduct = useMemo(() => {
+    const incoming = new Map<number, number>();
+    for (const order of orders) {
+      if (!["ORDERED", "PARTIALLY_RECEIVED"].includes(order.status)) continue;
+      for (const line of order.lines ?? []) {
+        incoming.set(line.productId, (incoming.get(line.productId) ?? 0) + Math.max(0, toNumber(line.quantity) - toNumber(line.quantityReceived)));
+      }
+    }
+    return incoming;
+  }, [orders]);
+
   const rows = useMemo(() => {
     return products
       .map((product) => {
         const current = stockByProductId.get(product.id) ?? 0;
         const minimum = toNumber(product.minimum ?? 0);
         const totalDemand = demandByProduct.get(product.id) ?? 0;
-        const projectedStock = current - totalDemand;
+        const incoming = incomingByProduct.get(product.id) ?? 0;
+        const projectedStock = current + incoming - totalDemand;
         const needToOrder = Math.max(0, minimum - projectedStock);
 
         return {
           product,
           current,
+          incoming,
           minimum,
           projectedStock,
           needToOrder,
@@ -152,7 +169,7 @@ export default function StockProjectionPage() {
         return (demandByProduct.get(row.product.id) ?? 0) > 0;
       })
       .sort((left, right) => right.needToOrder - left.needToOrder);
-  }, [products, stockByProductId, demandByProduct]);
+  }, [products, stockByProductId, demandByProduct, incomingByProduct]);
 
   const projectionStats = useMemo(() => {
     const needingOrder = rows.filter((row) => row.needToOrder > 0).length;
@@ -604,6 +621,7 @@ export default function StockProjectionPage() {
               <th className="p-3 text-left">Size / Gauge</th>
               <th className="p-3 text-left">Product Code</th>
               <th className="p-3 text-left">Current Stock</th>
+              <th className="p-3 text-left">On Order</th>
               <th className="p-3 text-left">Minimum Stock</th>
               <th className="p-3 text-left">Projected Stock</th>
               <th className="p-3 text-left">Need to Order</th>
@@ -611,7 +629,7 @@ export default function StockProjectionPage() {
           </thead>
           <tbody>
             {rows.map((row) => {
-              const { product, current, minimum, projectedStock, needToOrder } = row;
+              const { product, current, incoming, minimum, projectedStock, needToOrder } = row;
               return (
                 <tr key={product.id} className="border-t border-slate-200 hover:bg-slate-50">
                   <td className="p-3 text-slate-600">{product.category || "Misc"}</td>
@@ -620,6 +638,7 @@ export default function StockProjectionPage() {
                   <td className="p-3 text-slate-600">{product.sizeGauge || "-"}</td>
                   <td className="p-3 text-slate-600">{product.productCode || product.sku || "-"}</td>
                   <td className="p-3 text-slate-700">{current}</td>
+                  <td className="p-3 text-slate-700">{incoming}</td>
                   <td className="p-3 text-slate-700">{minimum}</td>
                   <td className="p-3 text-slate-700">{projectedStock}</td>
                   <td className="p-3 text-slate-900 font-semibold">{needToOrder}</td>
@@ -628,7 +647,7 @@ export default function StockProjectionPage() {
             })}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="p-6 text-center text-slate-500">
+                <td colSpan={10} className="p-6 text-center text-slate-500">
                   No projected rows yet. Add jobs and demand entries above.
                 </td>
               </tr>

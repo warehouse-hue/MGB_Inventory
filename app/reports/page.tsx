@@ -93,7 +93,11 @@ export default function ReportsPage() {
       products: products.length,
       inventoryLines: inventory.length,
       suppliers: suppliers.length,
-      openOrders: orders.filter((order) => order.status === "OPEN").length,
+      openOrders: orders.filter((order) => ["ORDERED", "PARTIALLY_RECEIVED"].includes(order.status)).length,
+      purchaseValue: orders.reduce(
+        (sum, order) => sum + (order.lines ?? []).reduce((lineSum, line) => lineSum + line.quantity * (line.lastBuyPrice ?? 0), 0),
+        0
+      ),
       lowStockCount,
       outOfStockCount,
       movementSummary,
@@ -184,6 +188,10 @@ export default function ReportsPage() {
           <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
             <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Open orders</p>
             <p className="mt-3 text-3xl font-semibold text-slate-950">{stats.openOrders}</p>
+          </div>
+          <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
+            <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Purchase order value</p>
+            <p className="mt-3 text-3xl font-semibold text-slate-950">${stats.purchaseValue.toFixed(2)}</p>
           </div>
           <div className="rounded-3xl bg-slate-50 p-5 border border-slate-200">
             <p className="text-slate-500 text-xs uppercase tracking-[0.24em]">Stock-in / out</p>

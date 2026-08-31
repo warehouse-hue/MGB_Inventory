@@ -226,10 +226,10 @@ export default function Page() {
     const productsById = new Map(products.map((product) => [product.id, product]));
     const now = new Date();
 
-    const activeOrders = orders.filter((order) => order.status === "OPEN");
-    const awaitingOrders = orders.filter((order) => order.status === "DELIVERED_PENDING");
-    const archivedOrders = orders.filter((order) => order.status === "CLOSED");
-    const inboundUnits = activeOrders.reduce((sum, order) => sum + order.quantity, 0);
+    const activeOrders = orders.filter((order) => ["ORDERED", "PARTIALLY_RECEIVED"].includes(order.status));
+    const awaitingOrders = orders.filter((order) => order.status === "PARTIALLY_RECEIVED");
+    const archivedOrders = orders.filter((order) => order.status === "RECEIVED");
+    const inboundUnits = activeOrders.reduce((sum, order) => sum + (order.lines ?? []).reduce((lineSum, line) => lineSum + Math.max(0, line.quantity - line.quantityReceived), 0), 0);
 
     const totalUnits = inventory.reduce((sum, item) => sum + Number(item.stock || 0), 0);
     const lowStockItems = inventory
@@ -925,10 +925,10 @@ export default function Page() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <SettingsChip label="Cloud" value={cloudConfigured ? "READY" : "LOCAL"} tone={cloudConfigured ? "emerald" : "amber"} />
+            <SettingsChip label="Data" value={cloudConfigured ? "CLOUD SYNCED" : "LOCAL ONLY"} tone={cloudConfigured ? "emerald" : "amber"} />
             <SettingsChip label="Supabase" value={supabaseHealthLabel} tone={supabaseHealthTone[supabaseHealth]} />
-            <SettingsChip label="Mode" value="OPS" tone="slate" />
-            <SettingsChip label="Controls" value="SOON" tone="cyan" />
+            <SettingsChip label="Sync" value={syncStatus === "syncing" ? "SYNCING" : "READY"} tone="slate" />
+            <SettingsChip label="Backup" value="AVAILABLE" tone="cyan" />
           </div>
         </div>
       </div>
@@ -954,7 +954,7 @@ export default function Page() {
         </div>
 
         <div className="glass-card p-6">
-          <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Planned controls</p>
+          <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Cloud sync</p>
           <h2 className="mt-2 text-xl font-semibold text-slate-950">Cloud sync control</h2>
           <p className="mt-3 text-sm text-slate-600">
             Trigger an immediate snapshot sync and check when cloud sync last completed.
@@ -1052,7 +1052,7 @@ export default function Page() {
           <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Email automation</p>
           <h2 className="mt-2 text-xl font-semibold text-slate-950">Overview digest delivery</h2>
           <p className="mt-3 text-sm text-slate-600">
-            Send the inventory operations brief now, and optionally enable weekly automatic delivery.
+            Send an inventory summary now. Weekly delivery currently runs when the app is open; server-side scheduling can be added when hosting supports it.
           </p>
 
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">

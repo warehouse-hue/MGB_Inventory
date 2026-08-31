@@ -147,12 +147,15 @@ export default function DashboardPage() {
         return { id: job.id, name: job.name, dateNeeded: job.dateNeeded, itemsAtRisk };
       });
 
-    const openOrders = orders.filter((order) => order.status === "OPEN");
+    const openOrders = orders.filter((order) => ["ORDERED", "PARTIALLY_RECEIVED"].includes(order.status));
     return {
       productCount: products.length,
       lowStockCount: stockSummary.lowStockCount,
       openOrderCount: openOrders.length,
-      unitsOnOrder: openOrders.reduce((sum, order) => sum + safeNumber(order.quantity), 0),
+      unitsOnOrder: openOrders.reduce(
+        (sum, order) => sum + (order.lines ?? []).reduce((lineSum, line) => lineSum + Math.max(0, safeNumber(line.quantity) - safeNumber(line.quantityReceived)), 0),
+        0
+      ),
       issues: [...outOfStockIssues, ...lowStockIssues].slice(0, 8),
       upcomingJobs,
       recentActivity: activity

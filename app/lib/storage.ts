@@ -56,6 +56,15 @@ export type Transaction = {
   date: number;
 };
 
+export type PurchaseOrderLine = {
+  productId: number;
+  productName: string;
+  variant: string;
+  quantity: number;
+  quantityReceived: number;
+  lastBuyPrice?: number;
+};
+
 export type PurchaseOrder = {
   id: number;
   productId: number;
@@ -63,16 +72,12 @@ export type PurchaseOrder = {
   variant: string;
   quantity: number;
   orderedDate: string;
+  expectedDeliveryDate?: string;
+  notes?: string;
   supplier?: string;
   lastBuyPrice?: number;
-  status: "OPEN" | "DELIVERED_PENDING" | "CLOSED";
-  lines?: Array<{
-    productId: number;
-    productName: string;
-    variant: string;
-    quantity: number;
-    lastBuyPrice?: number;
-  }>;
+  status: "DRAFT" | "ORDERED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
+  lines?: PurchaseOrderLine[];
 };
 
 export type Supplier = {
@@ -548,8 +553,19 @@ export function clearActivityLog() {
   queueCloudSync();
 }
 
+function normalizeOrder(order: any): PurchaseOrder {
+  const legacyStatus = order.status === "OPEN" ? "ORDERED" : order.status === "DELIVERED_PENDING" ? "PARTIALLY_RECEIVED" : order.status === "CLOSED" ? "RECEIVED" : order.status;
+  const lines = Array.isArray(order.lines) && order.lines.length
+    ? order.lines.map((line: any) => ({ ...line, quantity: safeNumber(line.quantity), quantityReceived: Math.max(0, safeNumber(line.quantityReceived)) }))
+    : [{ productId: order.productId, productName: order.productName || "Product", variant: order.variant || "", quantity: safeNumber(order.quantity), quantityReceived: legacyStatus === "RECEIVED" ? safeNumber(order.quantity) : 0, lastBuyPrice: order.lastBuyPrice }];
+  const totalQuantity = lines.reduce((sum: number, line: PurchaseOrderLine) => sum + line.quantity, 0);
+  const totalReceived = lines.reduce((sum: number, line: PurchaseOrderLine) => sum + line.quantityReceived, 0);
+  const status = legacyStatus === "CANCELLED" || legacyStatus === "DRAFT" ? legacyStatus : totalReceived >= totalQuantity && totalQuantity > 0 ? "RECEIVED" : totalReceived > 0 ? "PARTIALLY_RECEIVED" : "ORDERED";
+  return { ...order, productId: order.productId ?? lines[0].productId, productName: order.productName || lines[0].productName, variant: order.variant ?? lines[0].variant, quantity: totalQuantity, status, lines };
+}
+
 export function getOrders(): PurchaseOrder[] {
-  return safeGet<PurchaseOrder[]>("mgb-orders", []);
+  return safeGet<any[]>("mgb-orders", []).map(normalizeOrder);
 }
 
 export function saveOrders(orders: PurchaseOrder[]) {

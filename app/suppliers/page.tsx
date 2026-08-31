@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Handshake } from "lucide-react";
-import { getSuppliers, saveSuppliers, addSupplier, addActivity, generateId, Supplier } from "../lib/storage";
+import { getSuppliers, saveSuppliers, addSupplier, addActivity, generateId, getOrders, getProducts, Supplier } from "../lib/storage";
 
 type LocalSupplier = Supplier;
 
@@ -45,12 +45,16 @@ export default function SuppliersPage() {
   });
   const [editId, setEditId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [products, setProducts] = useState<ReturnType<typeof getProducts>>([]);
+  const [orders, setOrders] = useState<ReturnType<typeof getOrders>>([]);
 
   useEffect(() => {
     const saved = getSuppliers();
     if (saved.length) {
       setSuppliers(saved);
     }
+    setProducts(getProducts());
+    setOrders(getOrders());
   }, []);
 
   const handleSaveSupplier = () => {
@@ -340,6 +344,9 @@ export default function SuppliersPage() {
             </p>
             <p className="text-slate-600 text-sm">
               Payment terms: {supplier.paymentTerms === "PREPAYMENT" ? "Pre-payment" : "Post-payment"}
+            </p>
+            <p className="text-slate-600 text-sm">
+              Products supplied: {products.filter((product) => product.supplier === supplier.name).length} · Open POs: {orders.filter((order) => ["ORDERED", "PARTIALLY_RECEIVED"].includes(order.status) && order.supplier === supplier.name).length}
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <button
