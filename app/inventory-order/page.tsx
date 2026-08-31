@@ -50,7 +50,7 @@ export default function InventoryOrderPage() {
     saveOrders([...newOrders, ...existingOrders]); saveProducts(updatedProducts); setOrders([...newOrders, ...existingOrders]); setProducts(updatedProducts); addActivity(`Created ${newOrders.length} purchase order${newOrders.length === 1 ? "" : "s"} from Low / Out of Stock`); setSelected({}); setReviewing(false); setIsCreating(false);
   };
 
-  return <div className="p-5 space-y-4 max-w-[1800px] mx-auto animate-fade-in-up">
+  return <div className="p-5 space-y-4 max-w-[1800px] mx-auto">
     <div className="command-hero command-hero-inventory-order"><div className="mt-3 command-slip-icon"><TriangleAlert />Low / Out of Stock</div><h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Low / Out of Stock</h1><p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">Items that need restocking.</p></div>
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:max-w-3xl"><Metric label="Out of Stock" value={summary.out} tone="danger" /><Metric label="Low Stock" value={summary.low} tone="warning" /><Metric label="On Order" value={summary.ordered} tone="neutral" /><Metric label="Needs Action" value={summary.action} tone="warning" /></div>
     {selectedItems.length > 0 ? <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700"><span>{selectedItems.length} items selected · {selectedUnits} total units · {groups.size} suppliers</span><button type="button" onClick={() => setReviewing(true)} disabled={groups.size === 0} className="rounded-md bg-cyan-500 px-3 py-1.5 font-semibold text-slate-950 disabled:opacity-50">Review Orders</button></section> : null}

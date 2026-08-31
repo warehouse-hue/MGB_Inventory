@@ -176,7 +176,7 @@ export default function InventoryCountPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
+    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       <div className="command-hero command-hero-inventory">
         <div className="mt-3 command-slip-icon"><CheckSquare />Inventory Count</div>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory Count</h1>
