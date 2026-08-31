@@ -25,6 +25,17 @@ function normalizeText(value: string | undefined) {
   return (value || "").trim().toLowerCase();
 }
 
+function getOrderLines(order: PurchaseOrder) {
+  return order.lines?.length
+    ? order.lines
+    : [{ productId: order.productId, productName: order.productName, variant: order.variant, quantity: order.quantity, lastBuyPrice: order.lastBuyPrice }];
+}
+
+function getOrderLabel(order: PurchaseOrder) {
+  const lines = getOrderLines(order);
+  return lines.length === 1 ? lines[0].productName : `${order.supplier || "Supplier"} PO (${lines.length} items)`;
+}
+
 export default function PurchaseOrdersPage() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -53,8 +64,7 @@ export default function PurchaseOrdersPage() {
     if (!normalizedSearch) return true;
 
     const content = [
-      order.productName,
-      order.variant,
+      ...getOrderLines(order).flatMap((line) => [line.productName, line.variant]),
       order.supplier,
       order.orderedDate,
       order.status,
@@ -86,7 +96,7 @@ export default function PurchaseOrdersPage() {
     (archivedPage - 1) * ITEMS_PER_PAGE,
     archivedPage * ITEMS_PER_PAGE
   );
-  const inboundUnits = activeOrders.reduce((sum, order) => sum + order.quantity, 0);
+  const inboundUnits = activeOrders.reduce((sum, order) => sum + getOrderLines(order).reduce((lineSum, line) => lineSum + line.quantity, 0), 0);
 
   useEffect(() => {
     setActivePage(1);
@@ -131,8 +141,9 @@ export default function PurchaseOrdersPage() {
     const updatedOrders = updateOrder(updatedOrder);
     setOrders(updatedOrders);
 
+    const orderProductIds = new Set(getOrderLines(order).map((line) => line.productId));
     const updatedProducts = getProducts().map((product) =>
-      product.id === order.productId
+      orderProductIds.has(product.id)
         ? {
             ...product,
             ordered: false,
@@ -142,7 +153,7 @@ export default function PurchaseOrdersPage() {
     );
     saveProducts(updatedProducts);
 
-    addActivity(`Delivered order for ${order.productName}; awaiting stock readjustment`);
+    addActivity(`Delivered order for ${getOrderLabel(order)}; awaiting stock readjustment`);
   };
 
   const handleApplyStockReadjustment = (orderId: number, quantityToAdd: number) => {
@@ -150,36 +161,16 @@ export default function PurchaseOrdersPage() {
     if (!order) return;
 
     const currentInventory = getInventory();
-    let adjusted = false;
-
-    const updatedInventory = currentInventory.map((item) => {
-      if (adjusted || item.productId !== order.productId) {
-        return item;
+    const lines = getOrderLines(order);
+    const updatedInventory = currentInventory.slice();
+    for (const line of lines) {
+      const receivedQuantity = lines.length === 1 ? quantityToAdd : line.quantity;
+      const matchingIndex = updatedInventory.findIndex((item) => item.productId === line.productId && (!normalizeText(line.variant) || !normalizeText(item.variant) || normalizeText(item.variant) === normalizeText(line.variant)));
+      if (matchingIndex >= 0) {
+        updatedInventory[matchingIndex] = { ...updatedInventory[matchingIndex], stock: Number(updatedInventory[matchingIndex].stock || 0) + Number(receivedQuantity || 0) };
+      } else {
+        updatedInventory.unshift({ id: generateId(), productId: line.productId, variant: line.variant || "", stock: Number(receivedQuantity || 0), location: "Main Warehouse" });
       }
-
-      if (
-        normalizeText(order.variant) &&
-        normalizeText(item.variant) &&
-        normalizeText(order.variant) !== normalizeText(item.variant)
-      ) {
-        return item;
-      }
-
-      adjusted = true;
-      return {
-        ...item,
-        stock: Number(item.stock || 0) + Number(quantityToAdd || 0),
-      };
-    });
-
-    if (!adjusted) {
-      updatedInventory.unshift({
-        id: generateId(),
-        productId: order.productId,
-        variant: order.variant || "",
-        stock: Number(quantityToAdd || 0),
-        location: "Main Warehouse",
-      });
     }
 
     saveInventory(updatedInventory);
@@ -193,12 +184,12 @@ export default function PurchaseOrdersPage() {
     setOrders(updatedOrders);
     setApplyStockOrderId(null);
     setNewStockAmount("");
-    addActivity(`Applied stock readjustment for ${order.productName}`);
+    addActivity(`Applied stock readjustment for ${getOrderLabel(order)}`);
   };
 
   const openApplyStockModal = (order: PurchaseOrder) => {
     setApplyStockOrderId(order.id);
-    setNewStockAmount(String(order.quantity || 0));
+    setNewStockAmount(String(getOrderLines(order).reduce((sum, line) => sum + line.quantity, 0)));
   };
 
   const submitApplyStock = () => {

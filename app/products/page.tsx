@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { SquarePlus } from "lucide-react";
 import {
   addActivity,
@@ -91,6 +91,8 @@ export default function ProductsPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [createdName, setCreatedName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [editTarget, setEditTarget] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<FormState>(createInitialForm());
   const isCreatingRef = useRef(false);
 
   useEffect(() => {
@@ -128,6 +130,89 @@ export default function ProductsPage() {
     setForm(createInitialForm());
     setErrors({});
     setCreatedName("");
+  };
+
+  const startEditProduct = (product: Product) => {
+    const stock = inventory
+      .filter((item) => item.productId === product.id)
+      .reduce((sum, item) => sum + safeNumber(item.stock), 0);
+    setEditTarget(product.id);
+    setEditForm({
+      brandUses: product.brandUses || "",
+      model: product.model || product.name || "",
+      sizeGauge: product.sizeGauge || "",
+      productCode: product.productCode || product.sku || "",
+      category: product.category || "",
+      orderQty: String(product.orderQty ?? 0),
+      minimum: product.minimum != null ? String(product.minimum) : "",
+      currentStock: String(stock),
+      ordered: Boolean(product.ordered),
+      orderedDate: product.orderedDate || "",
+      supplier: resolveSupplierName(product.supplier || "", suppliers),
+      lastBuyPrice: product.lastBuyPrice != null ? String(product.lastBuyPrice) : "",
+    });
+  };
+
+  const saveProductEdits = () => {
+    if (editTarget === null) return;
+    const currentProduct = products.find((product) => product.id === editTarget);
+    if (!currentProduct || !editForm.category || (!editForm.model.trim() && !editForm.productCode.trim())) return;
+
+    const orderedDate = editForm.ordered ? (editForm.orderedDate || new Date().toISOString().slice(0, 10)) : "";
+    const updatedProduct: Product = {
+      ...currentProduct,
+      name: editForm.model.trim() || editForm.productCode.trim(),
+      sku: editForm.productCode.trim() || editForm.model.trim() || currentProduct.sku,
+      category: editForm.category,
+      brandUses: editForm.brandUses.trim(),
+      model: editForm.model.trim(),
+      sizeGauge: editForm.sizeGauge.trim(),
+      productCode: editForm.productCode.trim(),
+      orderQty: Math.max(0, safeNumber(editForm.orderQty)),
+      minimum: editForm.minimum ? Math.max(0, safeNumber(editForm.minimum)) : undefined,
+      ordered: editForm.ordered,
+      orderedDate,
+      supplier: resolveSupplierName(editForm.supplier, suppliers),
+      lastBuyPrice: editForm.lastBuyPrice ? Math.max(0, safeNumber(editForm.lastBuyPrice)) : undefined,
+    };
+    const updatedProducts = products.map((product) => product.id === editTarget ? updatedProduct : product);
+    const productInventory = inventory.filter((item) => item.productId === editTarget);
+    const updatedInventory = [
+      ...inventory.filter((item) => item.productId !== editTarget),
+      {
+        id: productInventory[0]?.id ?? generateId(),
+        productId: editTarget,
+        variant: updatedProduct.sizeGauge || productInventory[0]?.variant || "",
+        stock: Math.max(0, safeNumber(editForm.currentStock)),
+        location: productInventory[0]?.location || getAppSettings().defaultLocation,
+      },
+    ];
+    const existingOrders = getOrders();
+    const existingOrder = existingOrders.find((order) => order.productId === editTarget);
+    const updatedOrders = editForm.ordered
+      ? [
+          {
+            id: existingOrder?.id ?? generateId(),
+            productId: editTarget,
+            productName: updatedProduct.model || updatedProduct.brandUses || updatedProduct.sku || updatedProduct.name,
+            variant: updatedProduct.sizeGauge || "",
+            quantity: updatedProduct.orderQty ?? 0,
+            orderedDate,
+            supplier: updatedProduct.supplier,
+            lastBuyPrice: updatedProduct.lastBuyPrice,
+            status: "OPEN" as const,
+          },
+          ...existingOrders.filter((order) => order.productId !== editTarget),
+        ]
+      : existingOrders.filter((order) => order.productId !== editTarget);
+
+    saveProducts(updatedProducts);
+    saveInventory(updatedInventory);
+    saveOrders(updatedOrders);
+    setProducts(updatedProducts);
+    setInventory(updatedInventory);
+    addActivity(`Updated product ${updatedProduct.name}`);
+    setEditTarget(null);
   };
 
   const addProduct = () => {
@@ -320,11 +405,13 @@ export default function ProductsPage() {
               <th className="p-3 text-left">Last Buy Price</th>
               <th className="p-3 text-left">Ordered</th>
               <th className="p-3 text-left">Ordered Date</th>
+              <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {products.map((product) => (
-              <tr key={product.id} className="border-t border-slate-200 hover:bg-slate-50">
+              <Fragment key={product.id}>
+              <tr className="border-t border-slate-200 hover:bg-slate-50">
                 <td className="p-3">{product.category || "-"}</td>
                 <td className="p-3">{product.brandUses || "-"}</td>
                 <td className="p-3 font-medium text-slate-950">{product.model || product.name || "-"}</td>
@@ -336,10 +423,31 @@ export default function ProductsPage() {
                 <td className="p-3">{product.lastBuyPrice != null ? `$${product.lastBuyPrice.toFixed(2)}` : "-"}</td>
                 <td className="p-3">{product.ordered ? "Yes" : "No"}</td>
                 <td className="p-3">{product.orderedDate || "-"}</td>
+                <td className="p-3 text-right"><button type="button" onClick={() => startEditProduct(product)} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">Edit details</button></td>
               </tr>
+              {editTarget === product.id ? (
+                <tr className="border-t border-slate-200 bg-slate-50"><td colSpan={12} className="p-4">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <EditField label="Category"><select value={editForm.category} onChange={(event) => setEditForm({ ...editForm, category: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900">{PRODUCT_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}</select></EditField>
+                    <EditField label="Brand / Uses"><input value={editForm.brandUses} onChange={(event) => setEditForm({ ...editForm, brandUses: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900" /></EditField>
+                    <EditField label="Model"><input value={editForm.model} onChange={(event) => setEditForm({ ...editForm, model: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900" /></EditField>
+                    <EditField label="Size / Gauge"><input value={editForm.sizeGauge} onChange={(event) => setEditForm({ ...editForm, sizeGauge: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900" /></EditField>
+                    <EditField label="Product Code"><input value={editForm.productCode} onChange={(event) => setEditForm({ ...editForm, productCode: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900" /></EditField>
+                    <EditField label="Current Stock"><input type="number" min="0" value={editForm.currentStock} onChange={(event) => setEditForm({ ...editForm, currentStock: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900" /></EditField>
+                    <EditField label="Minimum Stock"><input type="number" min="0" value={editForm.minimum} onChange={(event) => setEditForm({ ...editForm, minimum: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900" /></EditField>
+                    <EditField label="Order Qty"><input type="number" min="0" value={editForm.orderQty} onChange={(event) => setEditForm({ ...editForm, orderQty: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900" /></EditField>
+                    <EditField label="Supplier"><select value={editForm.supplier} onChange={(event) => setEditForm({ ...editForm, supplier: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900"><option value="">Select supplier</option>{supplierNames.map((supplier) => <option key={supplier} value={supplier}>{supplier}</option>)}</select></EditField>
+                    <EditField label="Last Buy Price"><input type="number" min="0" step="0.01" value={editForm.lastBuyPrice} onChange={(event) => setEditForm({ ...editForm, lastBuyPrice: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900" /></EditField>
+                    <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={editForm.ordered} onChange={(event) => setEditForm({ ...editForm, ordered: event.target.checked })} className="h-4 w-4 rounded border-slate-300" />Ordered</label>
+                    {editForm.ordered ? <EditField label="Ordered Date"><input type="date" value={editForm.orderedDate} onChange={(event) => setEditForm({ ...editForm, orderedDate: event.target.value })} className="edit-input" /></EditField> : null}
+                  </div>
+                  <div className="mt-4 flex gap-3"><button type="button" onClick={saveProductEdits} className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950">Save changes</button><button type="button" onClick={() => setEditTarget(null)} className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">Cancel</button></div>
+                </td></tr>
+              ) : null}
+              </Fragment>
             ))}
             {products.length === 0 ? (
-              <tr><td colSpan={11} className="p-5 text-slate-600">No inventory items yet.</td></tr>
+              <tr><td colSpan={12} className="p-5 text-slate-600">No inventory items yet.</td></tr>
             ) : null}
           </tbody>
         </table>
@@ -365,4 +473,8 @@ function Field({ label, error, children }: { label: string; error?: string; chil
       {error ? <p className="mt-1.5 text-xs text-rose-700">{error}</p> : null}
     </label>
   );
+}
+
+function EditField({ label, children }: { label: string; children: React.ReactNode }) {
+  return <label className="block text-sm font-medium text-slate-700">{label}<div className="mt-1.5">{children}</div></label>;
 }

@@ -66,6 +66,13 @@ export type PurchaseOrder = {
   supplier?: string;
   lastBuyPrice?: number;
   status: "OPEN" | "DELIVERED_PENDING" | "CLOSED";
+  lines?: Array<{
+    productId: number;
+    productName: string;
+    variant: string;
+    quantity: number;
+    lastBuyPrice?: number;
+  }>;
 };
 
 export type Supplier = {
