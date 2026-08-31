@@ -72,6 +72,7 @@ function createInitialForm(): FormState {
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [form, setForm] = useState<FormState>({
     brandUses: "",
@@ -94,6 +95,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setProducts(getProducts());
+    setInventory(getInventory());
     setSuppliers(getSuppliers());
     setForm(createInitialForm());
   }, []);
@@ -102,6 +104,14 @@ export default function ProductsPage() {
     () => Array.from(new Set(suppliers.map((supplier) => supplier.name).filter(Boolean))).sort((left, right) => left.localeCompare(right)),
     [suppliers]
   );
+
+  const stockByProductId = useMemo(() => {
+    const stock = new Map<number, number>();
+    for (const item of inventory) {
+      stock.set(item.productId, (stock.get(item.productId) ?? 0) + safeNumber(item.stock));
+    }
+    return stock;
+  }, [inventory]);
 
   const updateForm = <Key extends keyof FormState>(key: Key, value: FormState[Key]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -184,9 +194,11 @@ export default function ProductsPage() {
     }
 
     const updatedProducts = [product, ...products];
-    saveInventory([inventoryItem, ...getInventory()]);
+    const updatedInventory = [inventoryItem, ...getInventory()];
+    saveInventory(updatedInventory);
     saveProducts(updatedProducts);
     setProducts(updatedProducts);
+    setInventory(updatedInventory);
     addActivity(`Added product ${product.name}`);
     setForm(createInitialForm());
     setErrors({});
@@ -287,6 +299,50 @@ export default function ProductsPage() {
           </button>
           <button type="button" onClick={resetForm} disabled={isCreating} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 disabled:opacity-60">Clear</button>
         </div>
+      </section>
+
+      <section className="glass-card overflow-x-auto">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="text-lg font-semibold text-slate-950">Inventory items</h2>
+          <p className="mt-1 text-sm text-slate-600">Product, stock, and purchasing details.</p>
+        </div>
+        <table className="min-w-full text-sm text-slate-700">
+          <thead className="bg-slate-100 text-slate-600">
+            <tr>
+              <th className="p-3 text-left">Category</th>
+              <th className="p-3 text-left">Brand / Uses</th>
+              <th className="p-3 text-left">Model</th>
+              <th className="p-3 text-left">Size / Gauge</th>
+              <th className="p-3 text-left">Stock</th>
+              <th className="p-3 text-left">Minimum</th>
+              <th className="p-3 text-left">Product Code</th>
+              <th className="p-3 text-left">Supplier</th>
+              <th className="p-3 text-left">Last Buy Price</th>
+              <th className="p-3 text-left">Ordered</th>
+              <th className="p-3 text-left">Ordered Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((product) => (
+              <tr key={product.id} className="border-t border-slate-200 hover:bg-slate-50">
+                <td className="p-3">{product.category || "-"}</td>
+                <td className="p-3">{product.brandUses || "-"}</td>
+                <td className="p-3 font-medium text-slate-950">{product.model || product.name || "-"}</td>
+                <td className="p-3">{product.sizeGauge || "-"}</td>
+                <td className="p-3 font-semibold text-slate-950">{stockByProductId.get(product.id) ?? 0}</td>
+                <td className="p-3">{product.minimum ?? 0}</td>
+                <td className="p-3">{product.productCode || product.sku || "-"}</td>
+                <td className="p-3">{resolveSupplierName(product.supplier, suppliers) || "-"}</td>
+                <td className="p-3">{product.lastBuyPrice != null ? `$${product.lastBuyPrice.toFixed(2)}` : "-"}</td>
+                <td className="p-3">{product.ordered ? "Yes" : "No"}</td>
+                <td className="p-3">{product.orderedDate || "-"}</td>
+              </tr>
+            ))}
+            {products.length === 0 ? (
+              <tr><td colSpan={11} className="p-5 text-slate-600">No inventory items yet.</td></tr>
+            ) : null}
+          </tbody>
+        </table>
       </section>
     </div>
   );
