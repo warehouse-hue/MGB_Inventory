@@ -226,9 +226,6 @@ export default function InventoryCountPage() {
         <div className="command-hero command-hero-inventory">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
-                INVENTORY COUNT TOOL
-              </p>
               <div className="mt-3 command-slip-icon">
                 <CheckSquare />
                 Count Inventory
@@ -306,16 +303,13 @@ export default function InventoryCountPage() {
       <div className="command-hero command-hero-inventory">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
-              INVENTORY COUNT TOOL
-            </p>
             <div className="mt-3 command-slip-icon">
               <CheckSquare />
               Count Inventory
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory Count</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-              Quickly enter physical counts and adjust stock levels after reconciling warehouse quantities.
+              Count and reconcile current stock.
             </p>
           </div>
 

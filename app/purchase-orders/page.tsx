@@ -228,16 +228,13 @@ export default function PurchaseOrdersPage() {
       <div className="command-hero command-hero-orders">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
-              Orders
-            </p>
             <div className="mt-3 command-slip-icon">
               <ClipboardList />
               Orders
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Orders</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-              Track incoming orders and received deliveries in one place.
+              Track current and received purchase orders.
             </p>
           </div>
 

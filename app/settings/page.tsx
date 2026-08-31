@@ -380,7 +380,7 @@ export default function Page() {
     }
 
     return [
-      `# Inventory Operations Brief - ${new Date().toLocaleDateString()}`,
+      `# Inventory Summary - ${new Date().toLocaleDateString()}`,
       "",
       "## Key Metrics",
       `- Open Orders::${activeOrders.length}`,
@@ -391,7 +391,7 @@ export default function Page() {
       `- Stock Coverage::${stockCoveragePct}%`,
       `- Health Score::${inventoryHealthScore}/100`,
       "",
-      "## Action Queue",
+      "## Recommended Actions",
       ...actionQueue.map((item) => `- ${item}`),
       "",
       "## Stock Snapshot",
@@ -909,19 +909,18 @@ export default function Page() {
       <div className="command-hero command-hero-settings">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p
-              onClick={armHiddenWipe}
-              className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500 cursor-default select-none"
-            >
-              Settings
-            </p>
             <div className="mt-3 command-slip-icon">
               <Settings2 />
               Settings
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Settings</h1>
+            <h1
+              onClick={armHiddenWipe}
+              className="mt-3 cursor-default select-none text-3xl font-semibold tracking-tight sm:text-4xl"
+            >
+              Settings
+            </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-              Manage sync, workspace behavior, and warehouse controls.
+              R.P.O.S configuration and data tools.
             </p>
           </div>
 

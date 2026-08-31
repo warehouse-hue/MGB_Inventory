@@ -807,7 +807,7 @@ export default function ImportPage() {
         <div>
           <h1 className="text-3xl font-bold text-slate-950">Import Inventory</h1>
           <p className="mt-1 text-slate-600">
-            Advanced tool for bulk CSV imports. Files now queue first and only import when you send them.
+            Import product and inventory data from CSV files.
           </p>
         </div>
         <Link

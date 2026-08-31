@@ -283,16 +283,13 @@ export default function InventoryOrderPage() {
       <div className="command-hero command-hero-inventory-order">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
-              LOW STOCK
-            </p>
             <div className="mt-3 command-slip-icon">
               <TriangleAlert />
-              Low/Out of Stock
+              Low / Out of Stock
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Low/Out of Stock</h1>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Low / Out of Stock</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-              Live low-stock queue for products below minimum threshold, with direct ordered-state control.
+              Items that need restocking.
             </p>
           </div>
 
@@ -311,7 +308,7 @@ export default function InventoryOrderPage() {
             <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Automatic reorder</p>
             <h2 className="text-2xl font-semibold text-slate-950 mt-2">Low-stock products</h2>
             <p className="mt-2 text-sm text-slate-600">
-              Search the active shortage queue and mark items as ordered when purchase action has started.
+              Search low-stock items and mark them as ordered when purchasing has started.
             </p>
           </div>
           <input

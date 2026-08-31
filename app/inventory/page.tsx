@@ -511,16 +511,13 @@ export default function InventoryPage() {
       <div className="command-hero command-hero-inventory">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">
-              Stock
-            </p>
             <div className="mt-3 command-slip-icon">
               <Boxes />
               Inventory
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-              Live warehouse stock view with fast filtering, line-by-line status, and direct restock controls.
+              View and manage current warehouse stock.
             </p>
           </div>
 

@@ -350,14 +350,13 @@ export default function StockProjectionPage() {
   return (
     <div className="p-6 space-y-6 max-w-[2200px] mx-auto animate-fade-in-up">
       <div className="command-hero command-hero-stock-projection">
-        <p className="font-mono text-[0.7rem] uppercase tracking-[0.42em] text-slate-500">Planning</p>
         <div className="mt-3 command-slip-icon">
           <ChartColumnIncreasing />
           Stock Projection
         </div>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Stock Projection</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
-          Upcoming jobs planner. Manage jobs and item demand in one section, then track projected stock and order needs below.
+          Plan stock requirements for upcoming jobs.
         </p>
       </div>
 

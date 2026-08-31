@@ -2,85 +2,166 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getAppSettings, getOrders } from "../lib/storage";
+import {
+  getActivityLog,
+  getInventory,
+  getOrders,
+  getProducts,
+  getProjectionDemands,
+  getProjectionJobs,
+} from "../lib/storage";
 import { getStockSummary } from "../lib/reports";
 
-function safeArray<T>(value: any): T[] {
-  return Array.isArray(value) ? value : [];
+type DashboardIssue = {
+  id: string;
+  label: string;
+  detail: string;
+  tone: "danger" | "warning";
+};
+
+type UpcomingJob = {
+  id: string;
+  name: string;
+  dateNeeded: string;
+  itemsAtRisk: number;
+};
+
+type RecentActivity = {
+  id: number;
+  message: string;
+  date: number;
+};
+
+function safeNumber(value: unknown): number {
+  const numberValue = Number(value);
+  return Number.isNaN(numberValue) ? 0 : numberValue;
 }
 
-function safeNumber(value: any): number {
-  const n = Number(value);
-  return isNaN(n) ? 0 : n;
+function localDateKey() {
+  const date = new Date();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function formatDate(dateValue: string) {
+  return new Date(`${dateValue}T00:00:00`).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+function formatTimestamp(timestamp: number) {
+  return new Date(timestamp).toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
 
-  /* ALWAYS RUN HOOKS IN SAME ORDER */
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  /* ALWAYS DECLARE HOOKS (NO CONDITIONAL EXIT BEFORE THIS) */
-  const stock = useMemo(() => {
+  const dashboard = useMemo(() => {
     if (!mounted) {
       return {
-        totalProducts: 0,
-        totalUnits: 0,
+        productCount: 0,
         lowStockCount: 0,
-        outOfStockCount: 0,
-        lowStockItems: [],
-        outOfStockItems: [],
+        openOrderCount: 0,
+        unitsOnOrder: 0,
+        issues: [] as DashboardIssue[],
+        upcomingJobs: [] as UpcomingJob[],
+        recentActivity: [] as RecentActivity[],
       };
     }
 
-    const s = getStockSummary();
+    const products = getProducts();
+    const inventory = getInventory();
+    const orders = getOrders();
+    const activity = getActivityLog();
+    const jobs = getProjectionJobs();
+    const demands = getProjectionDemands();
+    const stockSummary = getStockSummary();
+    const productsById = new Map(products.map((product) => [product.id, product]));
+    const stockByProductId = new Map<number, number>();
 
-    return {
-      totalProducts: safeNumber(s?.totalProducts),
-      totalUnits: safeNumber(s?.totalUnits),
-      lowStockCount: safeNumber(s?.lowStockCount),
-      outOfStockCount: safeNumber(s?.outOfStockCount),
-      lowStockItems: safeArray(s?.lowStockItems),
-      outOfStockItems: safeArray(s?.outOfStockItems),
+    for (const item of inventory) {
+      stockByProductId.set(
+        item.productId,
+        (stockByProductId.get(item.productId) ?? 0) + safeNumber(item.stock)
+      );
+    }
+
+    const productLabel = (productId: number) => {
+      const product = productsById.get(productId);
+      if (!product) return `Product #${productId}`;
+      return [product.brandUses, product.model || product.name, product.sizeGauge]
+        .filter(Boolean)
+        .join(" ");
     };
-  }, [mounted]);
 
-  const openOrderSummary = useMemo(() => {
-    if (!mounted) {
+    const outOfStockIssues: DashboardIssue[] = stockSummary.outOfStockItems.map((item) => ({
+      id: `out-${item.id}`,
+      label: productLabel(item.productId),
+      detail: "0 remaining",
+      tone: "danger",
+    }));
+    const lowStockIssues: DashboardIssue[] = stockSummary.lowStockItems.map((item) => {
+      const minimum = safeNumber(productsById.get(item.productId)?.minimum);
       return {
-        count: 0,
-        units: 0,
+        id: `low-${item.id}`,
+        label: productLabel(item.productId),
+        detail: `${safeNumber(item.stock)} remaining${minimum > 0 ? ` · Minimum ${minimum}` : ""}`,
+        tone: "warning" as const,
       };
+    });
+
+    const demandsByJobId = new Map<string, typeof demands>();
+    for (const demand of demands) {
+      const jobDemands = demandsByJobId.get(demand.jobId) ?? [];
+      jobDemands.push(demand);
+      demandsByJobId.set(demand.jobId, jobDemands);
     }
 
-    const openOrders = getOrders().filter((order) => order.status === "OPEN");
+    const runningDemandByProductId = new Map<number, number>();
+    const upcomingJobs = jobs
+      .filter((job) => job.dateNeeded >= localDateKey())
+      .sort((left, right) => left.dateNeeded.localeCompare(right.dateNeeded))
+      .slice(0, 5)
+      .map((job) => {
+        let itemsAtRisk = 0;
 
+        for (const demand of demandsByJobId.get(job.id) ?? []) {
+          const totalDemand = (runningDemandByProductId.get(demand.productId) ?? 0) + safeNumber(demand.requiredQty);
+          runningDemandByProductId.set(demand.productId, totalDemand);
+          const currentStock = stockByProductId.get(demand.productId) ?? 0;
+          const minimum = safeNumber(productsById.get(demand.productId)?.minimum);
+          if (currentStock - totalDemand < minimum) itemsAtRisk += 1;
+        }
+
+        return { id: job.id, name: job.name, dateNeeded: job.dateNeeded, itemsAtRisk };
+      });
+
+    const openOrders = orders.filter((order) => order.status === "OPEN");
     return {
-      count: openOrders.length,
-      units: openOrders.reduce((sum, order) => sum + safeNumber(order.quantity), 0),
+      productCount: products.length,
+      lowStockCount: stockSummary.lowStockCount,
+      openOrderCount: openOrders.length,
+      unitsOnOrder: openOrders.reduce((sum, order) => sum + safeNumber(order.quantity), 0),
+      issues: [...outOfStockIssues, ...lowStockIssues].slice(0, 8),
+      upcomingJobs,
+      recentActivity: activity
+        .slice()
+        .sort((left, right) => right.date - left.date)
+        .slice(0, 10)
+        .map((entry) => ({ id: entry.id, message: entry.message, date: entry.date })),
     };
   }, [mounted]);
-
-  const settings = useMemo(() => getAppSettings(), [mounted]);
-
-  const radarStats = useMemo(() => {
-    const low = stock.lowStockCount;
-    const out = stock.outOfStockCount;
-    const inbound = openOrderSummary.count;
-    const inboundUnits = openOrderSummary.units;
-    const totalAlerts = low + out;
-    return {
-      totalAlerts,
-      inbound,
-      inboundUnits,
-      criticalOutOfStockCount: out,
-    };
-  }, [openOrderSummary, stock]);
-
-  const topLowStockItems = stock.lowStockItems.slice(0, 4);
-  const topOutOfStockItems = stock.outOfStockItems.slice(0, 4);
 
   return (
     <div className="min-h-[calc(100vh-2rem)] p-6">
@@ -88,148 +169,86 @@ export default function DashboardPage() {
         <section className="py-3">
           <div className="flex flex-col gap-8 xl:flex-row xl:items-center xl:justify-between">
             <div className="max-w-2xl">
-              <h1 className="text-4xl font-semibold text-slate-950 sm:text-5xl">
-                Dashboard
-              </h1>
-              <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-                Stock, orders and inventory at a glance.
-              </p>
+              <h1 className="text-4xl font-semibold text-slate-950 sm:text-5xl">Dashboard</h1>
+              <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">Stock, orders and inventory at a glance.</p>
             </div>
-
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <SignalChip label="Products" value={stock.totalProducts} />
-              <SignalChip
-                label="Low Stock"
-                value={stock.lowStockCount}
-                tone={stock.lowStockCount > 0 ? "amber" : "slate"}
-              />
-              <SignalChip label="Open POs" value={radarStats.inbound} />
-              <SignalChip label="Units on Order" value={radarStats.inboundUnits} tone="slate" />
+              <SummaryMetric href="/inventory" label="Products" value={dashboard.productCount} />
+              <SummaryMetric href="/inventory-order" label="Low Stock" value={dashboard.lowStockCount} tone={dashboard.lowStockCount > 0 ? "warning" : "neutral"} />
+              <SummaryMetric href="/purchase-orders" label="Open POs" value={dashboard.openOrderCount} />
+              <SummaryMetric href="/purchase-orders" label="Units on Order" value={dashboard.unitsOnOrder} />
             </div>
           </div>
         </section>
 
         {!mounted ? (
-          <div className="rounded-[32px] border border-slate-200/80 bg-white p-8 text-slate-500 shadow-sm">
-            Loading dashboard...
-          </div>
+          <div className="rounded-lg border border-slate-200/80 bg-white p-6 text-slate-500">Loading dashboard...</div>
         ) : (
           <>
-            <div className="grid gap-5 xl:grid-cols-4">
-              <Card
-                label="Low Stock"
-                value={stock.lowStockCount}
-                description="Items needing attention soon."
-                accentClassName="bg-slate-50 border-slate-200 text-slate-950"
-                href="/inventory"
-              />
-              <Card
-                label="Out of Stock"
-                value={radarStats.criticalOutOfStockCount}
-                description={
-                  settings.includeNonStockedInAlerts
-                    ? "Inventory entries currently at zero stock."
-                    : "Tracked inventory entries currently at zero stock (minimum threshold above zero)."
-                }
-                accentClassName="bg-slate-50 border-slate-200 text-slate-950"
-                href="/inventory"
-              />
-              <Card
-                label="Open Orders"
-                value={openOrderSummary.count}
-                description="Purchase orders still awaiting completion."
-                accentClassName="bg-slate-50 border-slate-200 text-slate-950"
-                href="/purchase-orders"
-              />
-              <Card
-                label="Units on Order"
-                value={openOrderSummary.units}
-                description="Total quantity currently on open purchase orders."
-                accentClassName="bg-slate-50 border-slate-200 text-slate-950"
-                href="/purchase-orders"
-              />
-            </div>
-
-            <div className="grid gap-5 xl:grid-cols-[1.4fr_0.9fr]">
-              <div className="rounded-lg border border-slate-200/90 bg-white p-6">
-                <div>
-                  <h2 className="text-2xl font-semibold text-slate-950">Stock overview</h2>
-                  <p className="mt-2 max-w-2xl text-base leading-7 text-slate-600">
-                    Current stock levels and incoming orders.
-                  </p>
+            <section className="rounded-lg border border-slate-200/90 bg-white p-6">
+              <h2 className="text-2xl font-semibold text-slate-950">Needs attention</h2>
+              {dashboard.issues.length === 0 ? (
+                <div className="mt-4 border-t border-slate-200 pt-4">
+                  <p className="font-medium text-slate-950">All clear</p>
+                  <p className="mt-1 text-sm text-slate-600">No stock or order issues need attention.</p>
                 </div>
-
-                <div className="mt-6 space-y-4">
-                  <MeterRow
-                    label="Low stock"
-                    value={stock.lowStockCount}
-                    max={Math.max(8, radarStats.totalAlerts || 1)}
-                    tone="amber"
-                  />
-                  <MeterRow
-                    label="Out of stock"
-                    value={radarStats.criticalOutOfStockCount}
-                    max={Math.max(8, radarStats.totalAlerts || 1)}
-                    tone="rose"
-                  />
-                  <MeterRow
-                    label="Open purchase orders"
-                    value={openOrderSummary.count}
-                    max={Math.max(6, openOrderSummary.count || 1)}
-                    tone="sky"
-                  />
-                  <MeterRow
-                    label="Units on order"
-                    value={openOrderSummary.units}
-                    max={Math.max(20, openOrderSummary.units || 1)}
-                    tone="slate"
-                  />
+              ) : (
+                <div className="mt-4 divide-y divide-slate-200 border-t border-slate-200">
+                  {dashboard.issues.map((issue) => (
+                    <Link key={issue.id} href="/inventory-order" className="flex items-center gap-4 py-4 transition hover:bg-slate-50">
+                      <span className={`h-2 w-2 rounded-full ${issue.tone === "danger" ? "bg-rose-500" : "bg-amber-500"}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">{issue.tone === "danger" ? "Out of stock" : "Low stock"}</p>
+                        <p className="mt-1 truncate font-medium text-slate-950">{issue.label}</p>
+                      </div>
+                      <p className="shrink-0 text-sm text-slate-600">{issue.detail}</p>
+                    </Link>
+                  ))}
                 </div>
-              </div>
+              )}
+            </section>
 
-              <div className="grid gap-5">
-                <div className="rounded-lg border border-slate-200/90 bg-slate-50 p-6">
-                  <h2 className="text-xl font-semibold text-slate-950">Needs attention</h2>
-                  <div className="mt-5 space-y-3">
-                    {topLowStockItems.length === 0 ? (
-                      <EmptyState message="No low stock items are currently flagged." />
-                    ) : (
-                      topLowStockItems.map((item: any) => (
-                        <QueueRow
-                          key={item.id}
-                          label={`Product #${item.productId}`}
-                          value={`${item.stock} left`}
-                          tone="amber"
-                        />
-                      ))
-                    )}
+            <div className="grid gap-6 xl:grid-cols-2">
+              <section className="rounded-lg border border-slate-200/90 bg-white p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <h2 className="text-xl font-semibold text-slate-950">Upcoming jobs</h2>
+                  <Link href="/stock-projection" className="text-sm font-medium">View projection</Link>
+                </div>
+                {dashboard.upcomingJobs.length === 0 ? (
+                  <p className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-600">No upcoming jobs currently added.</p>
+                ) : (
+                  <div className="mt-4 divide-y divide-slate-200 border-t border-slate-200">
+                    {dashboard.upcomingJobs.map((job) => (
+                      <Link key={job.id} href="/stock-projection" className="flex items-center gap-4 py-3 transition hover:bg-slate-50">
+                        <time className="w-14 shrink-0 text-sm font-medium text-slate-600" dateTime={job.dateNeeded}>{formatDate(job.dateNeeded)}</time>
+                        <span className="min-w-0 flex-1 truncate font-medium text-slate-950">{job.name}</span>
+                        <span className={job.itemsAtRisk > 0 ? "text-sm text-amber-700" : "text-sm text-slate-600"}>
+                          {job.itemsAtRisk > 0 ? `${job.itemsAtRisk} item${job.itemsAtRisk === 1 ? "" : "s"} at risk` : "Stock OK"}
+                        </span>
+                      </Link>
+                    ))}
                   </div>
-                </div>
+                )}
+              </section>
 
-                <div className="rounded-lg border border-slate-200/90 bg-slate-50 p-6">
-                  <h2 className="text-xl font-semibold text-slate-950">Out of stock</h2>
-                  <div className="mt-5 space-y-3">
-                    {topOutOfStockItems.length === 0 ? (
-                      <EmptyState
-                        message={
-                          settings.includeNonStockedInAlerts
-                            ? "No inventory entries are fully depleted."
-                            : "No tracked inventory entries are fully depleted."
-                        }
-                      />
-                    ) : (
-                      topOutOfStockItems.map((item: any) => (
-                        <QueueRow
-                          key={item.id}
-                          label={`Product #${item.productId}`}
-                          value="0 in stock"
-                          tone="rose"
-                        />
-                      ))
-                    )}
-                  </div>
+              <section className="rounded-lg border border-slate-200/90 bg-white p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <h2 className="text-xl font-semibold text-slate-950">Recent activity</h2>
+                  <Link href="/reports" className="text-sm font-medium">View reports</Link>
                 </div>
-              </div>
+                {dashboard.recentActivity.length === 0 ? (
+                  <p className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-600">No recent activity.</p>
+                ) : (
+                  <div className="mt-4 divide-y divide-slate-200 border-t border-slate-200">
+                    {dashboard.recentActivity.map((activity) => (
+                      <div key={activity.id} className="flex items-start justify-between gap-4 py-3">
+                        <p className="text-sm text-slate-950">{activity.message}</p>
+                        <time className="shrink-0 text-xs text-slate-500" dateTime={new Date(activity.date).toISOString()}>{formatTimestamp(activity.date)}</time>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
             </div>
           </>
         )}
@@ -238,129 +257,11 @@ export default function DashboardPage() {
   );
 }
 
-function SignalChip({
-  label,
-  value,
-  tone = "slate",
-}: {
-  label: string;
-  value: number;
-  tone?: "amber" | "slate";
-}) {
-  const toneClass = {
-    amber: "border-amber-200/80 bg-amber-100 text-slate-950",
-    slate: "border-slate-200 bg-slate-50 text-slate-950",
-  }[tone];
-
+function SummaryMetric({ href, label, value, tone = "neutral" }: { href: string; label: string; value: number; tone?: "neutral" | "warning" }) {
   return (
-    <div className={`rounded-lg border px-4 py-3 ${toneClass}`}>
-      <p className="text-sm font-medium text-slate-600">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
-    </div>
+    <Link href={href} className={`rounded-lg border px-4 py-3 transition hover:bg-slate-100 ${tone === "warning" ? "border-amber-200/80 bg-slate-50" : "border-slate-200 bg-slate-50"}`}>
+      <p className="text-sm font-medium text-slate-600">{label}</p>
+      <p className={tone === "warning" ? "mt-2 text-2xl font-semibold text-amber-900" : "mt-2 text-2xl font-semibold text-slate-950"}>{value}</p>
+    </Link>
   );
-}
-
-function MeterRow({
-  label,
-  value,
-  max,
-  tone,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  tone: "amber" | "rose" | "sky" | "slate";
-}) {
-  const width = Math.max(6, Math.min(100, (value / Math.max(max, 1)) * 100));
-  const toneClass = {
-    amber: "bg-amber-400",
-    rose: "bg-rose-400",
-    sky: "bg-sky-400",
-    slate: "bg-slate-300",
-  }[tone];
-
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-4 text-sm">
-        <span className="text-slate-600">{label}</span>
-        <span className="font-mono text-slate-900">{value}</span>
-      </div>
-      <div className="h-2.5 rounded-full bg-slate-100">
-        <div className={`h-2.5 rounded-full ${toneClass}`} style={{ width: `${width}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-      {message}
-    </div>
-  );
-}
-
-function QueueRow({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "amber" | "rose";
-}) {
-  const toneClass = {
-    amber: "border-amber-200 bg-white text-amber-900",
-    rose: "border-rose-200 bg-white text-rose-900",
-  }[tone];
-
-  return (
-    <div className={`flex items-center justify-between rounded-3xl border px-4 py-4 ${toneClass}`}>
-      <span className="font-medium text-slate-900">{label}</span>
-      <span className="font-mono text-sm text-slate-600">{value}</span>
-    </div>
-  );
-}
-
-/* KPI CARD */
-function Card({
-  label,
-  value,
-  description,
-  accentClassName = "bg-white border-slate-200/80",
-  href,
-}: {
-  label: string;
-  value: number;
-  description?: string;
-  accentClassName?: string;
-  href?: string;
-}) {
-  const className = `rounded-lg p-5 border transition duration-200 hover:bg-slate-100 ${accentClassName}`;
-
-  const content = (
-    <>
-      <div>
-        <p className="text-sm font-medium text-slate-600">
-          {label}
-        </p>
-        <p className="mt-3 text-3xl font-semibold text-slate-950">{value}</p>
-      </div>
-      {description ? (
-        <p className="mt-4 text-sm leading-6 text-slate-600">{description}</p>
-      ) : null}
-    </>
-  );
-
-  if (href) {
-    return (
-      <Link href={href} className={className}>
-        {content}
-      </Link>
-    );
-  }
-
-  return <div className={className}>{content}</div>;
 }
