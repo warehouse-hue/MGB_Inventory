@@ -118,6 +118,20 @@ export default function InventoryPage() {
   const adjustingItem = items.find((item) => item.id === adjustingItemId) ?? null;
   const adjustingProduct = adjustingItem ? productsById.get(adjustingItem.productId) : undefined;
   const filtersActive = Boolean(search || activeCategory !== "All" || activeStatus !== "ALL");
+  const hasUnsavedAdjustment = Boolean(
+    customChange || (adjustingItem && exactQuantity !== String(safeNumber(adjustingItem.stock)))
+  );
+
+  useEffect(() => {
+    if (!adjustingItemId) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAdjustingItemId(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [adjustingItemId]);
 
   const getStatus = (item: InventoryItem) => {
     const product = productsById.get(item.productId);
@@ -162,6 +176,7 @@ export default function InventoryPage() {
 
     if (recordUndo) setLastChange({ itemId, delta, productName: name });
     else setLastChange(null);
+    setAdjustingItemId(null);
     setIsUpdating(false);
     updateInProgressRef.current = false;
   };
@@ -289,10 +304,22 @@ export default function InventoryPage() {
       </section>
 
       {adjustingItem ? (
-        <section className="fixed inset-x-4 bottom-4 z-30 mx-auto max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-lg sm:inset-x-auto sm:right-6 sm:w-[32rem]">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"
+          onMouseDown={() => {
+            if (!hasUnsavedAdjustment) setAdjustingItemId(null);
+          }}
+        >
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="adjust-stock-title"
+          className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg border border-slate-200 bg-white p-5 shadow-lg"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-slate-950">Adjust stock</p>
+              <p id="adjust-stock-title" className="text-sm font-medium text-slate-950">Adjust stock</p>
               <p className="mt-1 text-sm text-slate-600">{productLabel(adjustingProduct)} · Current: {safeNumber(adjustingItem.stock)}</p>
             </div>
             <button type="button" onClick={() => setAdjustingItemId(null)} aria-label="Close adjustment" className="text-slate-600"><X className="h-5 w-5" /></button>
@@ -311,6 +338,7 @@ export default function InventoryPage() {
             <button type="button" disabled={isUpdating || exactQuantity === "" || safeNumber(exactQuantity) < 0} onClick={submitExactQuantity} className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Set quantity</button>
           </div>
         </section>
+        </div>
       ) : null}
     </div>
   );
