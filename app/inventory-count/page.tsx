@@ -199,15 +199,20 @@ export default function InventoryCountPage() {
       <section className="glass-card overflow-hidden">
         <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4"><h2 className="text-lg font-semibold text-slate-950">Count inventory</h2><button type="button" onClick={() => setShowReview(true)} disabled={differences.length === 0} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40">Review Differences</button></div>
         {filteredItems.length === 0 ? <p className="p-6 text-sm text-slate-600">No inventory matches your selection.</p> : (
-          <div role="table" aria-label="Inventory count" className="w-full text-sm">
-            <div role="row" className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_100px_130px_100px] gap-3 bg-slate-100 px-4 text-xs font-medium text-slate-600"><div className="py-3">Product</div><div className="py-3">Variant / Size</div><div className="py-3">System Qty</div><div className="py-3">Physical Count</div><div className="py-3">Difference</div></div>
+          <div role="table" aria-label="Inventory count" className="min-w-[1120px] w-full text-sm">
+            <div role="row" className="grid grid-cols-[150px_190px_minmax(0,1.4fr)_140px_100px_130px_90px_100px] gap-3 bg-slate-100 px-4 text-xs font-medium text-slate-600"><div className="py-3">Category</div><div className="py-3">Brand / Uses</div><div className="py-3">Product</div><div className="py-3">Size / Gauge</div><div className="py-3">Current</div><div className="py-3">Counted</div><div className="py-3">Counted?</div><div className="py-3">Difference</div></div>
             <div role="rowgroup">{filteredItems.map((item) => {
               const physicalCount = countInputs[item.id];
               const difference = physicalCount === undefined || physicalCount === "" ? null : safeNumber(physicalCount) - safeNumber(item.stock);
-              return <div key={item.id} role="row" className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_100px_130px_100px] items-center gap-3 border-t border-slate-200 px-4 hover:bg-slate-50">
-                <div className="min-w-0 py-3"><p className="truncate font-medium text-slate-950">{productLabel(productsById.get(item.productId))}</p><p className="truncate text-xs text-slate-500">{productsById.get(item.productId)?.brandUses || productsById.get(item.productId)?.productCode || "-"}</p></div>
-                <div className="truncate py-3 text-slate-600">{productsById.get(item.productId)?.sizeGauge || item.variant || "-"}</div><div className="py-3 font-semibold text-slate-950">{safeNumber(item.stock)}</div>
+              const product = productsById.get(item.productId);
+              const isCounted = physicalCount !== undefined && physicalCount !== "";
+              return <div key={item.id} role="row" className="grid grid-cols-[150px_190px_minmax(0,1.4fr)_140px_100px_130px_90px_100px] items-center gap-3 border-t border-slate-200 px-4 hover:bg-slate-50">
+                <div className="truncate py-3 text-slate-600">{product?.category || "Misc"}</div>
+                <div className="truncate py-3 font-medium text-slate-950">{product?.brandUses || product?.name || "-"}</div>
+                <div className="min-w-0 py-3"><p className="truncate text-slate-950">{productLabel(product)}</p><p className="truncate text-xs text-slate-500">{product?.productCode || product?.sku || "-"}</p></div>
+                <div className="truncate py-3 text-slate-600">{product?.sizeGauge || item.variant || "-"}</div><div className="py-3 font-semibold text-slate-950">{safeNumber(item.stock)}</div>
                 <div className="py-3"><input aria-label={`Physical count for ${productLabel(productsById.get(item.productId))}`} type="number" min="0" value={physicalCount ?? ""} onChange={(event) => updateCount(item.id, event.target.value)} className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900" /></div>
+                <div className="py-3"><span className={`inline-flex h-5 w-5 items-center justify-center rounded border text-xs ${isCounted ? "border-cyan-400 bg-cyan-500 text-slate-950" : "border-slate-300 bg-white text-transparent"}`}>✓</span></div>
                 <div className={`py-3 font-semibold ${difference === null || difference === 0 ? "text-slate-500" : difference < 0 ? "text-rose-700" : "text-amber-700"}`}>{difference === null ? "-" : difference > 0 ? `+${difference}` : difference}</div>
               </div>;
             })}</div>
