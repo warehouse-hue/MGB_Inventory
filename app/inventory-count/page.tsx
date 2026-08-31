@@ -1,535 +1,229 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CheckSquare, Search, RefreshCcw } from "lucide-react";
+import { CheckSquare, Search } from "lucide-react";
 import {
-  getInventory,
-  saveInventory,
-  getProducts,
+  addActivity,
   generateId,
+  getInventory,
+  getProducts,
   InventoryItem,
   Product,
+  saveInventory,
 } from "../lib/storage";
 import { addTransaction } from "../lib/transactions";
 
-function safeNumber(value: string | number | undefined) {
-  const number = Number(value);
-  return Number.isNaN(number) ? 0 : number;
-}
-
-function normalizeText(value: string | undefined) {
-  return (value || "").trim().toLowerCase();
-}
-
-type InventoryCountDraft = {
+type CountDraft = {
   countInputs: Record<number, string>;
-  countedIds: Record<number, boolean>;
   search: string;
-  sizeGaugeSearch: string;
   activeCategory: string;
 };
 
-const INVENTORY_COUNT_DRAFT_KEY = "inventory-count-draft";
+const DRAFT_KEY = "inventory-count-draft";
 
-function loadDraft(): InventoryCountDraft | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const stored = window.sessionStorage.getItem(INVENTORY_COUNT_DRAFT_KEY);
-    if (!stored) {
-      return null;
-    }
-
-    const parsed = JSON.parse(stored) as InventoryCountDraft;
-    return parsed;
-  } catch {
-    return null;
-  }
+function safeNumber(value: string | number | undefined) {
+  const numberValue = Number(value);
+  return Number.isNaN(numberValue) ? 0 : numberValue;
 }
 
-function saveDraft(draft: InventoryCountDraft) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
+function loadDraft(): CountDraft | null {
+  if (typeof window === "undefined") return null;
   try {
-    window.sessionStorage.setItem(INVENTORY_COUNT_DRAFT_KEY, JSON.stringify(draft));
+    const value = window.sessionStorage.getItem(DRAFT_KEY);
+    return value ? JSON.parse(value) as CountDraft : null;
   } catch {
-    // ignore storage errors
+    return null;
   }
 }
 
 function clearDraft() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.sessionStorage.removeItem(INVENTORY_COUNT_DRAFT_KEY);
-  } catch {
-    // ignore storage errors
-  }
+  if (typeof window !== "undefined") window.sessionStorage.removeItem(DRAFT_KEY);
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function productLabel(product: Product | undefined) {
+  return product?.model || product?.name || product?.brandUses || "Unknown product";
 }
-
-function matchesSizeGaugeValue(field: string | undefined, searchValue: string) {
-  if (!field) {
-    return false;
-  }
-
-  const normalizedField = field.toLowerCase();
-  const escapedSearch = escapeRegExp(searchValue);
-  const regex = new RegExp(`(^|[^0-9.])${escapedSearch}([^0-9.]|$)`);
-
-  return regex.test(normalizedField);
-}
-
-const categoryTabs = [
-  "All",
-  "Drum Skins",
-  "Percussion Skins",
-  "Guitar Strings",
-  "Guitar Accessories",
-  "Drum Sticks",
-  "Drum Accessories",
-  "Batteries",
-  "Tape",
-  "Misc",
-];
 
 export default function InventoryCountPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [search, setSearch] = useState("");
-  const [sizeGaugeSearch, setSizeGaugeSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState("All");
   const [countInputs, setCountInputs] = useState<Record<number, string>>({});
-  const [countedIds, setCountedIds] = useState<Record<number, boolean>>({});
-  const [saveMessage, setSaveMessage] = useState("");
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All Inventory");
+  const [showReview, setShowReview] = useState(false);
+  const [confirmApply, setConfirmApply] = useState(false);
+  const [completion, setCompletion] = useState<{ checked: number; matched: number; adjusted: number } | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const inventory = getInventory();
-    const products = getProducts();
     const draft = loadDraft();
-
     setItems(inventory);
-    setProducts(products);
+    setProducts(getProducts());
+    setCountInputs(draft?.countInputs ?? {});
     setSearch(draft?.search ?? "");
-    setSizeGaugeSearch(draft?.sizeGaugeSearch ?? "");
-    setActiveCategory(draft?.activeCategory ?? "All");
-    setCountInputs(
-      draft?.countInputs ??
-        Object.fromEntries(inventory.map((item) => [item.id, String(safeNumber(item.stock))]))
-    );
-    setCountedIds(
-      draft?.countedIds ??
-        Object.fromEntries(inventory.map((item) => [item.id, false]))
-    );
+    setActiveCategory(draft?.activeCategory === "All" ? "All Inventory" : draft?.activeCategory ?? "All Inventory");
     setHydrated(true);
   }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    if (!hydrated) {
-      return;
-    }
-
-    saveDraft({
-      countInputs,
-      countedIds,
-      search,
-      sizeGaugeSearch,
-      activeCategory,
-    });
-  }, [countInputs, countedIds, search, sizeGaugeSearch, activeCategory, hydrated]);
+    if (!hydrated) return;
+    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ countInputs, search, activeCategory }));
+  }, [activeCategory, countInputs, hydrated, search]);
 
   const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
+  const categories = useMemo(
+    () => ["All Inventory", ...Array.from(new Set(products.map((product) => product.category).filter(Boolean))).sort()],
+    [products]
+  );
 
   const filteredItems = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-    const normalizedSizeGaugeSearch = sizeGaugeSearch.trim().toLowerCase();
-
+    const queryTokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return items
       .filter((item) => {
         const product = productsById.get(item.productId);
-        const matchesText = [
-          product?.brandUses,
-          product?.model,
-          product?.sizeGauge,
-          item.variant,
-          product?.name,
-          product?.productCode,
-          product?.sku,
-        ]
+        const fields = [product?.name, product?.brandUses, product?.model, product?.sizeGauge, product?.category, product?.productCode, product?.sku, item.variant]
           .filter(Boolean)
           .join(" ")
-          .toLowerCase()
-          .includes(normalizedSearch);
-
-        const matchesSizeGauge =
-          !normalizedSizeGaugeSearch ||
-          [product?.sizeGauge, item.variant]
-            .filter(Boolean)
-            .some((field) => matchesSizeGaugeValue(field, normalizedSizeGaugeSearch));
-
-        const matchesCategory =
-          activeCategory === "All" || (product?.category || "Misc") === activeCategory;
-
-        return matchesText && matchesSizeGauge && matchesCategory;
+          .toLowerCase();
+        return queryTokens.every((token) => fields.includes(token)) && (activeCategory === "All Inventory" || product?.category === activeCategory);
       })
-      .sort((left, right) => {
-        const leftProduct = productsById.get(left.productId);
-        const rightProduct = productsById.get(right.productId);
+      .sort((left, right) => productLabel(productsById.get(left.productId)).localeCompare(productLabel(productsById.get(right.productId))));
+  }, [activeCategory, items, productsById, search]);
 
-        const byBrand = normalizeText(leftProduct?.brandUses).localeCompare(normalizeText(rightProduct?.brandUses));
-        if (byBrand !== 0) return byBrand;
+  const countedItems = useMemo(
+    () => items.filter((item) => countInputs[item.id] !== undefined && countInputs[item.id] !== ""),
+    [countInputs, items]
+  );
+  const differences = useMemo(
+    () => countedItems.filter((item) => safeNumber(countInputs[item.id]) !== safeNumber(item.stock)),
+    [countInputs, countedItems]
+  );
+  const summary = {
+    selected: filteredItems.length,
+    counted: countedItems.length,
+    matched: countedItems.length - differences.length,
+    differences: differences.length,
+    remaining: filteredItems.filter((item) => countInputs[item.id] === undefined || countInputs[item.id] === "").length,
+  };
 
-        const byModel = normalizeText(leftProduct?.model || leftProduct?.name).localeCompare(
-          normalizeText(rightProduct?.model || rightProduct?.name)
-        );
-        if (byModel !== 0) return byModel;
-
-        return left.id - right.id;
-      });
-  }, [items, productsById, search, sizeGaugeSearch, activeCategory]);
-
-  const summary = useMemo(() => {
-    const changedRows = filteredItems.filter((item) => {
-      const inputValue = countInputs[item.id];
-      return safeNumber(inputValue) !== safeNumber(item.stock);
-    });
-
-    const countedRows = filteredItems.filter((item) => countedIds[item.id]).length;
-
-    const totalDifference = changedRows.reduce((acc, item) => {
-      return acc + (safeNumber(countInputs[item.id]) - safeNumber(item.stock));
-    }, 0);
-
-    return {
-      totalRows: filteredItems.length,
-      changedRows: changedRows.length,
-      countedRows,
-      totalDifference,
+  useEffect(() => {
+    if (!hydrated || countedItems.length === 0) return;
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
     };
-  }, [filteredItems, countInputs, countedIds]);
-
-  if (!hydrated) {
-    return (
-      <div className="p-6 max-w-[2200px] mx-auto animate-fade-in-up">
-        <div className="command-hero command-hero-inventory">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="mt-3 command-slip-icon">
-                <CheckSquare />
-                Count Inventory
-              </div>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory Count</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-                Loading inventory data...
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+    window.addEventListener("beforeunload", warnBeforeLeave);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave);
+  }, [countedItems.length, hydrated]);
 
   const updateCount = (id: number, value: string) => {
-    if (/^[0-9]*$/.test(value) || value === "") {
-      setCountInputs((prev) => ({ ...prev, [id]: value }));
-      setSaveMessage("");
-    }
+    if (!/^\d*$/.test(value)) return;
+    setCountInputs((current) => ({ ...current, [id]: value }));
+    setCompletion(null);
   };
 
-  const resetCounts = () => {
-    setCountInputs(Object.fromEntries(items.map((item) => [item.id, String(safeNumber(item.stock))])));
-    setCountedIds(Object.fromEntries(items.map((item) => [item.id, false])));
-    setSaveMessage("");
+  const clearSession = () => {
+    setCountInputs({});
+    setShowReview(false);
+    setConfirmApply(false);
+    setCompletion(null);
+    clearDraft();
   };
 
-  const saveChanges = () => {
-    const changes = items.reduce<InventoryItem[]>((acc, item) => {
-      const rawValue = countInputs[item.id];
-      const newStock = safeNumber(rawValue);
-      if (newStock !== safeNumber(item.stock)) {
-        const product = productsById.get(item.productId);
-        addTransaction({
-          id: generateId(),
-          type: "ADJUST",
-          productId: item.productId,
-          inventoryItemId: item.id,
-          productName: product?.name || product?.model || "",
-          variant: item.variant,
-          quantity: newStock - safeNumber(item.stock),
-          previousStock: safeNumber(item.stock),
-          newStock,
-          date: Date.now(),
-        });
-
-        acc.push({
-          ...item,
-          stock: newStock,
-        });
-      }
-      return acc;
-    }, []);
-
-    if (changes.length === 0) {
-      setSaveMessage("No quantity changes found to save.");
-      return;
-    }
-
+  const applyAdjustments = () => {
     const updatedInventory = items.map((item) => {
-      const changed = changes.find((change) => change.id === item.id);
-      return changed ?? item;
+      const count = countInputs[item.id];
+      if (count === undefined || count === "") return item;
+      const physicalCount = safeNumber(count);
+      const systemQuantity = safeNumber(item.stock);
+      if (physicalCount === systemQuantity) return item;
+      const product = productsById.get(item.productId);
+      const change = physicalCount - systemQuantity;
+      addTransaction({
+        id: generateId(),
+        type: "ADJUST",
+        productId: item.productId,
+        inventoryItemId: item.id,
+        productName: productLabel(product),
+        variant: item.variant,
+        quantity: change,
+        previousStock: systemQuantity,
+        newStock: physicalCount,
+        date: Date.now(),
+      });
+      addActivity(`Inventory count adjustment: ${change >= 0 ? "+" : ""}${change} ${productLabel(product)}`);
+      return { ...item, stock: physicalCount };
     });
 
     saveInventory(updatedInventory);
     setItems(updatedInventory);
-    setCountedIds(Object.fromEntries(updatedInventory.map((item) => [item.id, false])));
+    setCompletion({ checked: countedItems.length, matched: summary.matched, adjusted: differences.length });
+    setCountInputs({});
+    setShowReview(false);
+    setConfirmApply(false);
     clearDraft();
-    setSaveMessage(`${changes.length} inventory count ${changes.length === 1 ? "update" : "updates"} saved.`);
   };
 
+  if (!hydrated) {
+    return <div className="p-6 text-sm text-slate-600">Loading inventory count...</div>;
+  }
+
   return (
-    <div className="p-6 space-y-6 max-w-[2200px] mx-auto animate-fade-in-up">
+    <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
       <div className="command-hero command-hero-inventory">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="mt-3 command-slip-icon">
-              <CheckSquare />
-              Count Inventory
-            </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory Count</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-              Count and reconcile current stock.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <StatChip label="Visible lines" value={summary.totalRows} tone="slate" />
-            <StatChip label="Changed" value={summary.changedRows} tone="amber" />
-            <StatChip label="Net diff" value={summary.totalDifference} tone="slate" />
-            <button
-              type="button"
-              onClick={resetCounts}
-              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-            >
-              <span className="inline-flex items-center gap-2 text-slate-700">
-                <RefreshCcw className="h-4 w-4" /> Reset counts
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={saveChanges}
-              disabled={summary.changedRows === 0}
-              className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Save updates
-            </button>
-          </div>
-        </div>
+        <div className="mt-3 command-slip-icon"><CheckSquare />Inventory Count</div>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory Count</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">Count physical stock and reconcile it with R.P.O.S.</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
-        <div className="space-y-4">
-          <div className="glass-card p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">
-                  Count inventory by item
-                </p>
-                <h2 className="text-xl font-semibold text-slate-950 mt-2">Physical count reconciliation</h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  Search and filter inventory rows, then enter the actual count for each product variant.
-                </p>
-              </div>
-
-              <div className="grid w-full gap-3 sm:grid-cols-[1fr_220px]">
-                <div className="relative w-full">
-                  <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-400">
-                    <Search className="h-4 w-4" />
-                  </span>
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search inventory..."
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-400"
-                  />
-                </div>
-                <div className="relative w-full">
-                  <input
-                    value={sizeGaugeSearch}
-                    onChange={(e) => setSizeGaugeSearch(e.target.value)}
-                    placeholder='Size / gauge (try 8" for exact size)'
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-sky-400"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-card p-4">
-            <div className="flex flex-wrap gap-3">
-              {categoryTabs.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => setActiveCategory(category)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                    activeCategory === category
-                      ? "bg-slate-950 text-white shadow-sm"
-                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
-                  }`}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="glass-card overflow-x-auto">
-            <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-mono text-xs uppercase tracking-[0.28em] text-slate-500">Inventory count table</p>
-                <p className="mt-2 text-sm text-slate-500">
-                  {summary.totalRows} rows, {summary.changedRows} changed, net diff {summary.totalDifference}
-                </p>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-                Click a count field to update physical quantities.
-              </div>
-            </div>
-
-            <div role="table" aria-label="Inventory count table" className="min-w-[1320px] w-full text-sm text-slate-700">
-              <div className="grid grid-cols-[160px_220px_160px_140px_120px_120px_120px_120px] bg-slate-100 text-slate-600">
-                <div className="p-3 text-left whitespace-nowrap">Category</div>
-                <div className="p-3 text-left whitespace-nowrap">Brand / Uses</div>
-                <div className="p-3 text-left whitespace-nowrap">Product</div>
-                <div className="p-3 text-left whitespace-nowrap">Size / Gauge</div>
-                <div className="p-3 text-left whitespace-nowrap">Current</div>
-                <div className="p-3 text-left whitespace-nowrap">Counted</div>
-                <div className="p-3 text-left whitespace-nowrap">Counted?</div>
-                <div className="p-3 text-left whitespace-nowrap">Difference</div>
-              </div>
-
-              <div role="rowgroup" style={{ overflowAnchor: "none" }}>
-                {filteredItems.map((item) => {
-                  const product = productsById.get(item.productId);
-                  const currentStock = safeNumber(item.stock);
-                  const inputValue = countInputs[item.id] ?? String(currentStock);
-                  const countedStock = safeNumber(inputValue);
-                  const difference = countedStock - currentStock;
-                  const differenceLabel = difference === 0 ? "OK" : difference > 0 ? `+${difference}` : String(difference);
-                  const isChanged = difference !== 0;
-
-                  return (
-                    <div
-                      key={item.id}
-                      className={`grid grid-cols-[160px_220px_160px_140px_120px_120px_120px_120px] border-t border-slate-200 transition hover:bg-slate-50 ${
-                        isChanged ? "bg-amber-100" : "bg-white"
-                      }`}
-                    >
-                      <div className="p-3 font-medium text-slate-950 overflow-hidden text-ellipsis whitespace-nowrap">{product?.category || "Misc"}</div>
-                      <div className="p-3 font-medium text-slate-950 overflow-hidden text-ellipsis whitespace-nowrap">
-                        {product?.brandUses || product?.name || "Unknown"}
-                      </div>
-                      <div className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">{product?.model || product?.name || "-"}</div>
-                      <div className="p-3 text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap">{product?.sizeGauge || item.variant || "-"}</div>
-                      <div className="p-3 text-slate-700 font-semibold whitespace-nowrap">{currentStock}</div>
-                      <div className="p-3">
-                        <input
-                          type="number"
-                          min={0}
-                          value={inputValue}
-                          onChange={(event) => updateCount(item.id, event.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-sky-400"
-                        />
-                      </div>
-                      <div className="p-3 flex items-center justify-center">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(countedIds[item.id])}
-                          onChange={() => setCountedIds((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
-                          className="h-5 w-5 rounded border-slate-300 bg-slate-50 accent-cyan-600 shadow-sm focus:ring-cyan-500"
-                        />
-                      </div>
-                      <div className="p-3 whitespace-nowrap font-semibold text-slate-900">
-                        <span className={isChanged ? "text-rose-600" : "text-slate-500"}>{differenceLabel}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+      {completion ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <span>Inventory count complete: {completion.checked} checked, {completion.matched} matched, {completion.adjusted} adjusted.</span>
+          <div className="flex gap-3"><button type="button" onClick={clearSession} className="font-medium text-cyan-700">Continue Counting</button><Link href="/inventory" className="font-medium text-cyan-700">View Inventory</Link></div>
         </div>
+      ) : null}
 
-        <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          <div className="glass-card p-6 text-slate-900">
-            <p className="font-mono text-sm uppercase tracking-[0.24em] text-slate-500">Inventory reconciliation</p>
-            <h2 className="mt-2 text-xl font-semibold text-slate-950">Count summary</h2>
-            <div className="mt-5 space-y-4">
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-500">Changed rows</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-950">{summary.changedRows}</p>
-              </div>
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <p className="font-mono text-xs uppercase tracking-[0.24em] text-slate-500">Total variance</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-950">{summary.totalDifference >= 0 ? `+${summary.totalDifference}` : summary.totalDifference}</p>
-              </div>
-            </div>
-            <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              <p className="font-semibold text-slate-950">How to use</p>
-              <ol className="mt-3 list-decimal space-y-2 pl-5 text-slate-700">
-                <li>Search or filter to the rows you want to count.</li>
-                <li>Enter the physical quantity in the Counted column.</li>
-                <li>Check the box in the Counted? column when that item is verified.</li>
-                <li>Press Save updates to apply new stock levels.</li>
-              </ol>
-            </div>
+      <section className="glass-card p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="relative flex-1"><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search inventory..." className="w-full rounded-lg border border-slate-200 bg-white py-3 pl-10 pr-3 text-slate-900" /></div>
+          <select value={activeCategory} onChange={(event) => setActiveCategory(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900">{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select>
+          {(search || activeCategory !== "All Inventory") ? <button type="button" onClick={() => { setSearch(""); setActiveCategory("All Inventory"); }} className="text-sm font-medium text-cyan-700">Clear filters</button> : null}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-slate-200 pt-4 text-sm text-slate-600">
+          <span>{summary.selected} selected</span><span>{summary.counted} counted</span><span>{summary.matched} matched</span><span>{summary.differences} differences</span><span>{summary.remaining} remaining</span>
+        </div>
+      </section>
+
+      <section className="glass-card overflow-hidden">
+        <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4"><h2 className="text-lg font-semibold text-slate-950">Count inventory</h2><button type="button" onClick={() => setShowReview(true)} disabled={differences.length === 0} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40">Review Differences</button></div>
+        {filteredItems.length === 0 ? <p className="p-6 text-sm text-slate-600">No inventory matches your selection.</p> : (
+          <div role="table" aria-label="Inventory count" className="w-full text-sm">
+            <div role="row" className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_100px_130px_100px] gap-3 bg-slate-100 px-4 text-xs font-medium text-slate-600"><div className="py-3">Product</div><div className="py-3">Variant / Size</div><div className="py-3">System Qty</div><div className="py-3">Physical Count</div><div className="py-3">Difference</div></div>
+            <div role="rowgroup">{filteredItems.map((item) => {
+              const physicalCount = countInputs[item.id];
+              const difference = physicalCount === undefined || physicalCount === "" ? null : safeNumber(physicalCount) - safeNumber(item.stock);
+              return <div key={item.id} role="row" className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_100px_130px_100px] items-center gap-3 border-t border-slate-200 px-4 hover:bg-slate-50">
+                <div className="min-w-0 py-3"><p className="truncate font-medium text-slate-950">{productLabel(productsById.get(item.productId))}</p><p className="truncate text-xs text-slate-500">{productsById.get(item.productId)?.brandUses || productsById.get(item.productId)?.productCode || "-"}</p></div>
+                <div className="truncate py-3 text-slate-600">{productsById.get(item.productId)?.sizeGauge || item.variant || "-"}</div><div className="py-3 font-semibold text-slate-950">{safeNumber(item.stock)}</div>
+                <div className="py-3"><input aria-label={`Physical count for ${productLabel(productsById.get(item.productId))}`} type="number" min="0" value={physicalCount ?? ""} onChange={(event) => updateCount(item.id, event.target.value)} className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900" /></div>
+                <div className={`py-3 font-semibold ${difference === null || difference === 0 ? "text-slate-500" : difference < 0 ? "text-rose-700" : "text-amber-700"}`}>{difference === null ? "-" : difference > 0 ? `+${difference}` : difference}</div>
+              </div>;
+            })}</div>
           </div>
+        )}
+      </section>
 
-          {saveMessage ? (
-            <div className="rounded-3xl border border-slate-200/25 bg-slate-50 p-4 text-slate-900">
-              <p className="font-semibold">Update status</p>
-              <p className="mt-2 text-sm">{saveMessage}</p>
-            </div>
-          ) : null}
-        </aside>
-      </div>
-    </div>
-  );
-}
+      {showReview ? (
+        <section className="glass-card p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold text-slate-950">Review differences</h2><p className="mt-1 text-sm text-slate-600">{differences.length} {differences.length === 1 ? "item" : "items"} will be adjusted. {summary.remaining > 0 ? `${summary.remaining} uncounted items will remain unchanged.` : ""}</p></div><button type="button" onClick={() => setShowReview(false)} className="text-sm font-medium text-cyan-700">Back to count</button></div>
+          <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">{differences.map((item) => { const physical = safeNumber(countInputs[item.id]); const difference = physical - safeNumber(item.stock); return <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span className="font-medium text-slate-950">{productLabel(productsById.get(item.productId))} {productsById.get(item.productId)?.sizeGauge || item.variant}</span><span className="text-slate-600">System: {item.stock} · Physical: {physical} · Adjustment: {difference > 0 ? `+${difference}` : difference}</span></div>; })}</div>
+          <div className="mt-5 flex flex-wrap gap-3"><button type="button" onClick={() => setConfirmApply(true)} className="rounded-lg bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950">Apply Adjustments</button><button type="button" onClick={clearSession} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">Reset count</button></div>
+        </section>
+      ) : null}
 
-function StatChip({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "cyan" | "slate" | "amber" | "rose" | "sky";
-}) {
-  const toneClass = {
-    cyan: "border-cyan-400/25 bg-cyan-400/10 text-cyan-950",
-    slate: "border-slate-200 bg-slate-100 text-slate-950",
-    amber: "border-amber-300/40 bg-amber-100 text-amber-950",
-    rose: "border-rose-300/25 bg-rose-100 text-rose-950",
-    sky: "border-sky-300/25 bg-sky-100 text-slate-950",
-  }[tone];
-
-  return (
-    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
-      <p className="font-mono text-[0.62rem] uppercase tracking-[0.28em] opacity-80">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
+      {confirmApply ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"><section role="dialog" aria-modal="true" aria-labelledby="confirm-count-title" className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6"><h2 id="confirm-count-title" className="text-xl font-semibold text-slate-950">Apply adjustments?</h2><p className="mt-2 text-sm text-slate-600">{differences.length} inventory items will be adjusted to match the physical count. {summary.remaining > 0 ? `${summary.remaining} uncounted items will remain unchanged.` : ""}</p><div className="mt-5 flex gap-3"><button type="button" onClick={applyAdjustments} className="rounded-lg bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950">Apply Adjustments</button><button type="button" onClick={() => setConfirmApply(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">Cancel</button></div></section></div> : null}
     </div>
   );
 }
