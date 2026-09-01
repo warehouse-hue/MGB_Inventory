@@ -480,6 +480,10 @@ table:not(.inventory-items-table) tbody tr:nth-child(even),
   background: var(--surface-hover);
 }
 
+.glass-card .divide-y.divide-slate-200 > :not(:first-child) {
+  border-color: var(--border);
+}
+
 :is(.hover\:bg-white:hover, .hover\:bg-white\/90:hover, .hover\:bg-slate-50:hover, .hover\:bg-slate-100:hover, .hover\:bg-sky-50\/35:hover) {
   background-color: var(--surface-hover) !important;
 }
