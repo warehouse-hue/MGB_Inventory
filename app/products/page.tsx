@@ -94,6 +94,7 @@ export default function ProductsPage() {
   const [editTarget, setEditTarget] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<FormState>(createInitialForm());
   const [tableSearch, setTableSearch] = useState("");
+  const [tableCategory, setTableCategory] = useState("All");
   const isCreatingRef = useRef(false);
 
   useEffect(() => {
@@ -116,11 +117,15 @@ export default function ProductsPage() {
     return stock;
   }, [inventory]);
 
+  const tableCategories = useMemo(
+    () => ["All", ...Array.from(new Set(products.map((product) => product.category).filter(Boolean))).sort()],
+    [products]
+  );
+
   const filteredProducts = useMemo(() => {
     const terms = tableSearch.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    if (!terms.length) return products;
-    return products.filter((product) => terms.every((term) => [product.category, product.brandUses, product.model, product.name, product.sizeGauge, product.productCode, product.sku, resolveSupplierName(product.supplier, suppliers)].filter(Boolean).join(" ").toLowerCase().includes(term)));
-  }, [products, suppliers, tableSearch]);
+    return products.filter((product) => (tableCategory === "All" || product.category === tableCategory) && terms.every((term) => [product.category, product.brandUses, product.model, product.name, product.sizeGauge, product.productCode, product.sku, resolveSupplierName(product.supplier, suppliers)].filter(Boolean).join(" ").toLowerCase().includes(term)));
+  }, [products, suppliers, tableCategory, tableSearch]);
 
   const updateForm = <Key extends keyof FormState>(key: Key, value: FormState[Key]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -398,7 +403,7 @@ export default function ProductsPage() {
       <section className="glass-card overflow-hidden">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div><h2 className="text-lg font-semibold text-slate-950">Inventory items</h2><p className="mt-1 text-sm text-slate-600">Product, stock, and purchasing details.</p></div>
-          <input type="search" value={tableSearch} onChange={(event) => setTableSearch(event.target.value)} placeholder="Quick search inventory..." className="w-full max-w-xs rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 sm:w-72" />
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto"><input type="search" value={tableSearch} onChange={(event) => setTableSearch(event.target.value)} placeholder="Quick search inventory..." className="min-w-0 flex-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 sm:w-72" /><select value={tableCategory} onChange={(event) => setTableCategory(event.target.value)} aria-label="Filter by category" className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900">{tableCategories.map((category) => <option key={category} value={category}>{category}</option>)}</select></div>
         </div>
         <table className="w-full table-fixed text-sm text-slate-700">
           <thead className="bg-slate-100 text-slate-600">
