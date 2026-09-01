@@ -93,6 +93,7 @@ export default function ProductsPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [editTarget, setEditTarget] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<FormState>(createInitialForm());
+  const [tableSearch, setTableSearch] = useState("");
   const isCreatingRef = useRef(false);
 
   useEffect(() => {
@@ -114,6 +115,12 @@ export default function ProductsPage() {
     }
     return stock;
   }, [inventory]);
+
+  const filteredProducts = useMemo(() => {
+    const terms = tableSearch.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    if (!terms.length) return products;
+    return products.filter((product) => terms.every((term) => [product.category, product.brandUses, product.model, product.name, product.sizeGauge, product.productCode, product.sku, resolveSupplierName(product.supplier, suppliers)].filter(Boolean).join(" ").toLowerCase().includes(term)));
+  }, [products, suppliers, tableSearch]);
 
   const updateForm = <Key extends keyof FormState>(key: Key, value: FormState[Key]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -295,7 +302,7 @@ export default function ProductsPage() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-[1200px] mx-auto animate-fade-in-up">
+    <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
       <div className="command-hero command-hero-products">
         <div className="mt-3 command-slip-icon"><SquarePlus />Add Inventory</div>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Add Inventory</h1>
@@ -389,9 +396,9 @@ export default function ProductsPage() {
       </section>
 
       <section className="glass-card overflow-x-auto">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-semibold text-slate-950">Inventory items</h2>
-          <p className="mt-1 text-sm text-slate-600">Product, stock, and purchasing details.</p>
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div><h2 className="text-lg font-semibold text-slate-950">Inventory items</h2><p className="mt-1 text-sm text-slate-600">Product, stock, and purchasing details.</p></div>
+          <input type="search" value={tableSearch} onChange={(event) => setTableSearch(event.target.value)} placeholder="Quick search inventory..." className="w-full max-w-xs rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 sm:w-72" />
         </div>
         <table className="min-w-full text-sm text-slate-700">
           <thead className="bg-slate-100 text-slate-600">
@@ -411,7 +418,7 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {products.map((product) => (
+            {filteredProducts.map((product) => (
               <Fragment key={product.id}>
               <tr className="border-t border-slate-200 hover:bg-slate-50">
                 <td className="p-3">{product.category || "-"}</td>
@@ -448,8 +455,8 @@ export default function ProductsPage() {
               ) : null}
               </Fragment>
             ))}
-            {products.length === 0 ? (
-              <tr><td colSpan={12} className="p-5 text-slate-600">No inventory items yet.</td></tr>
+            {filteredProducts.length === 0 ? (
+              <tr><td colSpan={12} className="p-5 text-slate-600">{products.length === 0 ? "No inventory items yet." : "No inventory items match this search."}</td></tr>
             ) : null}
           </tbody>
         </table>
