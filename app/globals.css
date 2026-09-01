@@ -466,6 +466,12 @@ tbody tr:hover {
   background: var(--surface-hover);
 }
 
+.sticky-table-header tbody tr:nth-child(even),
+table:not(.inventory-items-table) tbody tr:nth-child(even),
+[role="table"] [role="rowgroup"] > [role="row"]:nth-child(even) {
+  background: var(--surface-raised);
+}
+
 .inventory-items-table tbody tr:nth-child(even) {
   background: var(--surface-raised);
 }
