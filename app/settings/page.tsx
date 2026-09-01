@@ -678,6 +678,11 @@ export default function Page() {
     "not-configured": "slate",
   } as const;
 
+  const cloudState = supabaseHealth === "healthy" ? (lastCloudSyncAt ? "CLOUD SYNCED" : "CONNECTED") : supabaseHealth === "checking" ? "CHECKING" : "LOCAL ONLY";
+  const cloudStateTone = supabaseHealth === "healthy" ? "emerald" : supabaseHealth === "checking" ? "cyan" : "amber";
+  const syncState = syncStatus === "syncing" ? "SYNCING" : syncStatus === "success" ? "SYNCED" : syncStatus === "error" ? "ERROR" : "READY";
+  const syncStateTone = syncStatus === "error" ? "rose" : syncStatus === "success" ? "emerald" : syncStatus === "syncing" ? "cyan" : "slate";
+
   const armHiddenWipe = () => {
     const nextCount = Math.min(armCount + 1, ARM_THRESHOLD);
     setArmCount(nextCount);
@@ -925,9 +930,9 @@ export default function Page() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <SettingsChip label="Data" value={cloudConfigured ? "CLOUD SYNCED" : "LOCAL ONLY"} tone={cloudConfigured ? "emerald" : "amber"} />
+            <SettingsChip label="Data" value={cloudState} tone={cloudStateTone} />
             <SettingsChip label="Supabase" value={supabaseHealthLabel} tone={supabaseHealthTone[supabaseHealth]} />
-            <SettingsChip label="Sync" value={syncStatus === "syncing" ? "SYNCING" : "READY"} tone="slate" />
+            <SettingsChip label="Sync" value={syncState} tone={syncStateTone} />
             <SettingsChip label="Backup" value="AVAILABLE" tone="cyan" />
           </div>
         </div>
