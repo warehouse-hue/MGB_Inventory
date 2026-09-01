@@ -466,6 +466,14 @@ tbody tr:hover {
   background: var(--surface-hover);
 }
 
+.inventory-items-table tbody tr:nth-child(even) {
+  background: var(--surface-raised);
+}
+
+.inventory-items-table tbody tr:hover {
+  background: var(--surface-hover);
+}
+
 :is(.hover\:bg-white:hover, .hover\:bg-white\/90:hover, .hover\:bg-slate-50:hover, .hover\:bg-slate-100:hover, .hover\:bg-sky-50\/35:hover) {
   background-color: var(--surface-hover) !important;
 }
