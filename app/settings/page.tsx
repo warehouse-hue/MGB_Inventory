@@ -1271,11 +1271,11 @@ function SettingsChip({
   tone: "emerald" | "amber" | "slate" | "cyan" | "rose";
 }) {
   const toneClass = {
-    emerald: "border-emerald-200/80 bg-emerald-100 text-slate-950",
-    amber: "border-amber-200/80 bg-amber-100 text-slate-950",
+    emerald: "border-emerald-200/80 bg-slate-100 text-slate-950",
+    amber: "border-amber-200/80 bg-slate-100 text-slate-950",
     slate: "border-slate-200/80 bg-slate-100 text-slate-950",
-    cyan: "border-cyan-200/80 bg-cyan-100 text-slate-950",
-    rose: "border-rose-200/80 bg-rose-100 text-slate-950",
+    cyan: "border-cyan-200/80 bg-slate-100 text-slate-950",
+    rose: "border-rose-200/80 bg-slate-100 text-slate-950",
   }[tone];
 
   return (
