@@ -26,7 +26,15 @@ export default function InventoryOrderPage() {
 
   const refresh = () => { setProducts(getProducts()); setInventory(getInventory()); setOrders(getOrders()); setSuppliers(getSuppliers()); };
   useEffect(() => { refresh(); window.addEventListener("mgb-storage-updated", refresh as EventListener); window.addEventListener("focus", refresh); return () => { window.removeEventListener("mgb-storage-updated", refresh as EventListener); window.removeEventListener("focus", refresh); }; }, []);
-  useEffect(() => { const projectionBasket = window.sessionStorage.getItem("mgb-projection-restock-basket"); if (!projectionBasket) return; try { setSelected(JSON.parse(projectionBasket)); } catch { /* Ignore an invalid temporary projection basket. */ } window.sessionStorage.removeItem("mgb-projection-restock-basket"); }, []);
+  useEffect(() => {
+    const projectionBasket = window.sessionStorage.getItem("mgb-projection-restock-basket");
+    if (projectionBasket) { try { setSelected(JSON.parse(projectionBasket)); } catch { /* Ignore an invalid temporary projection basket. */ } window.sessionStorage.removeItem("mgb-projection-restock-basket"); return; }
+    // Restore the restock basket so switching tabs doesn't lose selections until the page reloads.
+    const savedSelection = window.sessionStorage.getItem("mgb-restock-basket");
+    if (!savedSelection) return;
+    try { setSelected(JSON.parse(savedSelection)); } catch { /* Ignore an invalid saved basket. */ }
+  }, []);
+  useEffect(() => { window.sessionStorage.setItem("mgb-restock-basket", JSON.stringify(selected)); }, [selected]);
 
   const categories = useMemo(() => ["All", ...Array.from(new Set(products.map((product) => product.category).filter(Boolean))).sort()], [products]);
   const supplierNames = useMemo(() => ["All", ...Array.from(new Set(products.map((product) => resolveSupplierName(product.supplier || "", suppliers)).filter(Boolean))).sort()], [products, suppliers]);
