@@ -395,47 +395,39 @@ export default function ProductsPage() {
         </div>
       </section>
 
-      <section className="glass-card overflow-x-auto">
+      <section className="glass-card overflow-hidden">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div><h2 className="text-lg font-semibold text-slate-950">Inventory items</h2><p className="mt-1 text-sm text-slate-600">Product, stock, and purchasing details.</p></div>
           <input type="search" value={tableSearch} onChange={(event) => setTableSearch(event.target.value)} placeholder="Quick search inventory..." className="w-full max-w-xs rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 sm:w-72" />
         </div>
-        <table className="min-w-full text-sm text-slate-700">
+        <table className="w-full table-fixed text-sm text-slate-700">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
-              <th className="p-3 text-left">Category</th>
-              <th className="p-3 text-left">Brand / Uses</th>
-              <th className="p-3 text-left">Model</th>
-              <th className="p-3 text-left">Size / Gauge</th>
-              <th className="p-3 text-left">Stock</th>
-              <th className="p-3 text-left">Minimum</th>
-              <th className="p-3 text-left">Product Code</th>
-              <th className="p-3 text-left">Supplier</th>
-              <th className="p-3 text-left">Last Buy Price</th>
-              <th className="p-3 text-left">Ordered</th>
-              <th className="p-3 text-left">Ordered Date</th>
-              <th className="p-3 text-right">Actions</th>
+              <th className="w-[15%] p-3 text-left">Category</th>
+              <th className="w-[20%] p-3 text-left">Product</th>
+              <th className="w-[13%] p-3 text-left">Size / Code</th>
+              <th className="w-[10%] p-3 text-right">Stock</th>
+              <th className="w-[15%] p-3 text-left">Supplier</th>
+              <th className="w-[10%] p-3 text-right">Buy Price</th>
+              <th className="w-[10%] p-3 text-left">Order Status</th>
+              <th className="w-[7%] p-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredProducts.map((product) => (
               <Fragment key={product.id}>
               <tr className="border-t border-slate-200 hover:bg-slate-50">
-                <td className="p-3">{product.category || "-"}</td>
-                <td className="p-3">{product.brandUses || "-"}</td>
-                <td className="p-3 font-medium text-slate-950">{product.model || product.name || "-"}</td>
-                <td className="p-3">{product.sizeGauge || "-"}</td>
-                <td className="p-3 font-semibold text-slate-950">{stockByProductId.get(product.id) ?? 0}</td>
-                <td className="p-3">{product.minimum ?? 0}</td>
-                <td className="p-3">{product.productCode || product.sku || "-"}</td>
-                <td className="p-3">{resolveSupplierName(product.supplier, suppliers) || "-"}</td>
-                <td className="p-3">{product.lastBuyPrice != null ? `$${product.lastBuyPrice.toFixed(2)}` : "-"}</td>
-                <td className="p-3">{product.ordered ? "Yes" : "No"}</td>
-                <td className="p-3">{product.orderedDate || "-"}</td>
-                <td className="p-3 text-right"><button type="button" onClick={() => startEditProduct(product)} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">Edit details</button></td>
+                <td className="p-3 align-top text-xs">{product.category || "-"}</td>
+                <td className="p-3 align-top"><p className="font-medium text-slate-950">{product.model || product.name || "-"}</p><p className="mt-1 truncate text-xs text-slate-500">{product.brandUses || "-"}</p></td>
+                <td className="p-3 align-top text-xs"><p>{product.sizeGauge || "-"}</p><p className="mt-1 truncate text-slate-500">{product.productCode || product.sku || "-"}</p></td>
+                <td className="p-3 text-right align-top"><p className="font-semibold text-slate-950">{stockByProductId.get(product.id) ?? 0}</p><p className="mt-1 text-xs text-slate-500">Min {product.minimum ?? 0}</p></td>
+                <td className="p-3 align-top text-xs"><span className="block truncate">{resolveSupplierName(product.supplier, suppliers) || "No supplier"}</span></td>
+                <td className="p-3 text-right align-top text-xs">{product.lastBuyPrice != null ? `$${product.lastBuyPrice.toFixed(2)}` : "-"}</td>
+                <td className="p-3 align-top text-xs"><p>{product.ordered ? "Ordered" : "Not ordered"}</p><p className="mt-1 text-slate-500">{product.orderedDate || "-"}</p></td>
+                <td className="p-3 text-right align-top"><button type="button" onClick={() => startEditProduct(product)} className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700">Edit</button></td>
               </tr>
               {editTarget === product.id ? (
-                <tr className="border-t border-slate-200 bg-slate-50"><td colSpan={12} className="p-4">
+                <tr className="border-t border-slate-200 bg-slate-50"><td colSpan={8} className="p-4">
                   <div className="grid gap-4 md:grid-cols-3">
                     <EditField label="Category"><select value={editForm.category} onChange={(event) => setEditForm({ ...editForm, category: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900">{PRODUCT_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}</select></EditField>
                     <EditField label="Brand / Uses"><input value={editForm.brandUses} onChange={(event) => setEditForm({ ...editForm, brandUses: event.target.value })} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-900" /></EditField>
@@ -456,7 +448,7 @@ export default function ProductsPage() {
               </Fragment>
             ))}
             {filteredProducts.length === 0 ? (
-              <tr><td colSpan={12} className="p-5 text-slate-600">{products.length === 0 ? "No inventory items yet." : "No inventory items match this search."}</td></tr>
+              <tr><td colSpan={8} className="p-5 text-slate-600">{products.length === 0 ? "No inventory items yet." : "No inventory items match this search."}</td></tr>
             ) : null}
           </tbody>
         </table>
