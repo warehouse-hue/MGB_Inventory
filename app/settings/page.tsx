@@ -65,6 +65,7 @@ type SmokeTestResult = {
 const SMOKE_TEST_ROUTES = [
   "/dashboard",
   "/inventory",
+  "/inventory-count",
   "/products",
   "/inventory-order",
   "/stock-projection",
@@ -74,6 +75,20 @@ const SMOKE_TEST_ROUTES = [
   "/settings",
   "/import",
 ] as const;
+
+const SMOKE_ROUTE_MARKERS: Record<(typeof SMOKE_TEST_ROUTES)[number], string> = {
+  "/dashboard": "Dashboard",
+  "/inventory": "Inventory",
+  "/inventory-count": "Inventory Count",
+  "/products": "Quick search inventory",
+  "/inventory-order": "Low / Out of Stock",
+  "/stock-projection": "Projected Stock",
+  "/suppliers": "Suppliers",
+  "/purchase-orders": "New Purchase Order",
+  "/reports": "Reports",
+  "/settings": "Run Smoke Test",
+  "/import": "Import",
+};
 
 const SMOKE_SNAPSHOT_KEYS = [
   "mgb-products",
@@ -873,6 +888,14 @@ export default function Page() {
                 route,
                 ok: false,
                 detail: "Runtime error signal detected",
+              } satisfies SmokeTestResult;
+            }
+
+            if (!content.includes(SMOKE_ROUTE_MARKERS[route])) {
+              return {
+                route,
+                ok: false,
+                detail: "Expected page feature was not rendered",
               } satisfies SmokeTestResult;
             }
 
