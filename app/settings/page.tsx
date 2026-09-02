@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Settings2 } from "lucide-react";
-import { getCloudLastSyncedAt, syncCloudSnapshotNow } from "../lib/cloud-sync";
+import { getCloudLastSyncedAt, syncCloudSnapshotNow, verifyCloudConnection } from "../lib/cloud-sync";
 import {
   addActivity,
   getActivityLog,
@@ -149,7 +149,7 @@ export default function Page() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const cloudConfigured = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_URL && (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
   );
 
   useEffect(() => {
@@ -598,7 +598,7 @@ export default function Page() {
   useEffect(() => {
     if (!cloudConfigured) {
       setSupabaseHealth("not-configured");
-      setSupabaseDetail("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      setSupabaseDetail("Missing NEXT_PUBLIC_SUPABASE_URL and a Supabase public key.");
     }
 
     return;
@@ -608,40 +608,32 @@ export default function Page() {
     if (!cloudConfigured) return;
 
     let cancelled = false;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const runHealthCheck = async () => {
-      const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
       setSupabaseHealth("checking");
-      setSupabaseDetail("Checking Supabase REST endpoint...");
+      setSupabaseDetail("Checking app data access...");
       setSupabaseLatencyMs(null);
 
       const startedAt = performance.now();
 
       try {
-        const response = await fetch(`${baseUrl}/rest/v1/`, {
-          method: "GET",
-          headers: {
-            apikey: anonKey,
-            Authorization: `Bearer ${anonKey}`,
-          },
-          signal: controller.signal,
-        });
+        const connected = await Promise.race([
+          verifyCloudConnection(),
+          new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error("Health check timed out.")), 6000); }),
+        ]);
 
         if (cancelled) return;
 
         const latency = Math.round(performance.now() - startedAt);
         setSupabaseLatencyMs(latency);
 
-        if (response.ok) {
+        if (connected) {
           setSupabaseHealth("healthy");
-          setSupabaseDetail(`Connected to Supabase in ${latency}ms.`);
+          setSupabaseDetail(`Connected to app storage in ${latency}ms.`);
         } else {
           setSupabaseHealth("error");
-          setSupabaseDetail(`Supabase responded with HTTP ${response.status}.`);
+          setSupabaseDetail("Supabase is not configured for app storage.");
         }
       } catch (error) {
         if (cancelled) return;
@@ -649,7 +641,7 @@ export default function Page() {
         setSupabaseHealth(aborted ? "unreachable" : "error");
         setSupabaseDetail(aborted ? "Supabase health check timed out after 6s." : "Could not reach Supabase.");
       } finally {
-        clearTimeout(timeout);
+        if (timeout) clearTimeout(timeout);
       }
     };
 
@@ -657,8 +649,7 @@ export default function Page() {
 
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
-      controller.abort();
+      if (timeout) clearTimeout(timeout);
     };
   }, [cloudConfigured]);
 
@@ -976,6 +967,7 @@ export default function Page() {
           >
             {syncStatus === "syncing" ? "Syncing..." : "Sync Now"}
           </button>
+          {!cloudConfigured ? <p className="mt-2 text-xs text-slate-500">Add Supabase environment variables to enable sync.</p> : null}
         </div>
 
         <div className="glass-card p-6">

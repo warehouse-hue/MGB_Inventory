@@ -44,8 +44,12 @@ async function fetchWithTimeout(
 function hasConfig() {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      getApiKey()
   );
+}
+
+function getApiKey() {
+  return process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 }
 
 function getNamespace() {
@@ -79,7 +83,7 @@ export function getCloudLastSyncedAt() {
 }
 
 function getHeaders() {
-  const apiKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+  const apiKey = getApiKey();
 
   return {
     apikey: apiKey,
@@ -171,6 +175,13 @@ export async function syncCloudSnapshotNow() {
 
   const snapshot = readLocalSnapshot();
   await upsertRemoteSnapshot(snapshot);
+  await getRemoteRow();
+  return true;
+}
+
+export async function verifyCloudConnection() {
+  if (typeof window === "undefined" || !hasConfig()) return false;
+  await getRemoteRow();
   return true;
 }
 

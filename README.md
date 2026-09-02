@@ -63,11 +63,13 @@ with check (true);
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
 NEXT_PUBLIC_SYNC_NAMESPACE=main
 ```
 
 Notes:
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is the recommended Supabase browser key. `NEXT_PUBLIC_SUPABASE_ANON_KEY` remains supported for existing legacy projects; set one public key, never a service-role key.
+- Add the same variables to Vercel under Project Settings > Environment Variables, then redeploy. The URL and public key must come from the same Supabase project.
 - `NEXT_PUBLIC_SYNC_NAMESPACE` lets you separate environments (for example: `dev`, `staging`, `prod`).
 - If these env vars are missing, the app falls back to local-only storage.
 
