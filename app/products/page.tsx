@@ -93,6 +93,7 @@ export default function ProductsPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [editTarget, setEditTarget] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<FormState>(createInitialForm());
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [tableSearch, setTableSearch] = useState("");
   const [tableCategory, setTableCategory] = useState("All");
   const isCreatingRef = useRef(false);
@@ -149,6 +150,7 @@ export default function ProductsPage() {
       .filter((item) => item.productId === product.id)
       .reduce((sum, item) => sum + safeNumber(item.stock), 0);
     setEditTarget(product.id);
+    setDeleteConfirmId(null);
     setEditForm({
       brandUses: product.brandUses || "",
       model: product.model || product.name || "",
@@ -226,6 +228,22 @@ export default function ProductsPage() {
     setInventory(updatedInventory);
     addActivity(`Updated product ${updatedProduct.name}`);
     setEditTarget(null);
+  };
+
+  const deleteProduct = (productId: number) => {
+    const productToDelete = products.find((product) => product.id === productId);
+    const updatedProducts = products.filter((product) => product.id !== productId);
+    const updatedInventory = inventory.filter((item) => item.productId !== productId);
+    const updatedOrders = getOrders().filter((order) => order.productId !== productId);
+
+    saveProducts(updatedProducts);
+    saveInventory(updatedInventory);
+    saveOrders(updatedOrders);
+    setProducts(updatedProducts);
+    setInventory(updatedInventory);
+    addActivity(`Deleted product ${productToDelete?.name ?? productId}`);
+    setEditTarget(null);
+    setDeleteConfirmId(null);
   };
 
   const addProduct = () => {
@@ -447,7 +465,19 @@ export default function ProductsPage() {
                     <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={editForm.ordered} onChange={(event) => setEditForm({ ...editForm, ordered: event.target.checked })} className="h-4 w-4 rounded border-slate-300" />Ordered</label>
                     {editForm.ordered ? <EditField label="Ordered Date"><input type="date" value={editForm.orderedDate} onChange={(event) => setEditForm({ ...editForm, orderedDate: event.target.value })} className="edit-input" /></EditField> : null}
                   </div>
-                  <div className="mt-4 flex gap-3"><button type="button" onClick={saveProductEdits} className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950">Save changes</button><button type="button" onClick={() => setEditTarget(null)} className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">Cancel</button></div>
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button type="button" onClick={saveProductEdits} className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950">Save changes</button>
+                    <button type="button" onClick={() => { setEditTarget(null); setDeleteConfirmId(null); }} className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">Cancel</button>
+                    {deleteConfirmId === product.id ? (
+                      <div className="ml-auto flex flex-wrap items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
+                        <span className="text-xs font-medium text-rose-700">Delete this item permanently?</span>
+                        <button type="button" onClick={() => deleteProduct(product.id)} className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500">Confirm delete</button>
+                        <button type="button" onClick={() => setDeleteConfirmId(null)} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700">Keep item</button>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => setDeleteConfirmId(product.id)} className="ml-auto rounded-md border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50">Delete item</button>
+                    )}
+                  </div>
                 </td></tr>
               ) : null}
               </Fragment>
